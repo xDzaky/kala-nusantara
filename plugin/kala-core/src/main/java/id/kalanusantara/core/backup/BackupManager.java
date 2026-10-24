@@ -87,16 +87,16 @@ public class BackupManager {
     }
 
     /**
-     * Full Server Snapshot (Kategori 2).
+     * Core State Snapshot (Kategori 2).
      * Termasuk database konsisten, config plugin, manifest ber-SHA256, dan npcs.yml.
      */
     public void backupFullServer(CommandSender sender) {
-        sender.sendMessage(Component.text("Memulai pembuatan Full Backup Server Kala Nusantara...", NamedTextColor.YELLOW));
+        sender.sendMessage(Component.text("Memulai pembuatan Core State Backup (DB + Configs + Manifest)...", NamedTextColor.YELLOW));
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-                File zipFile = new File(backupDir, "kala_full_backup_" + timestamp + ".zip");
+                File zipFile = new File(backupDir, "kala_core_backup_" + timestamp + ".zip");
 
                 // 1. Ambil salinan DB aman di bawah dbLock
                 File tempDbCopy = File.createTempFile("kala_db_snap_", ".tmp");
@@ -154,14 +154,14 @@ public class BackupManager {
                 pruneOldBackups(backupDir, ".zip");
 
                 long sizeKb = zipFile.length() / 1024;
-                log.info("[BackupManager] Full Backup berhasil dibuat: " + zipFile.getName() + " (" + sizeKb + " KB)");
+                log.info("[BackupManager] Core State Backup berhasil dibuat: " + zipFile.getName() + " (" + sizeKb + " KB)");
                 Bukkit.getScheduler().runTask(plugin, () ->
-                    sender.sendMessage(Component.text("✔ Full backup server berhasil disimpan: " + zipFile.getName() + " (" + sizeKb + " KB)", NamedTextColor.GREEN))
+                    sender.sendMessage(Component.text("✔ Core State backup berhasil disimpan: " + zipFile.getName() + " (" + sizeKb + " KB)", NamedTextColor.GREEN))
                 );
             } catch (Exception e) {
-                log.severe("[BackupManager] Gagal membuat full backup: " + e.getMessage());
+                log.severe("[BackupManager] Gagal membuat core backup: " + e.getMessage());
                 Bukkit.getScheduler().runTask(plugin, () ->
-                    sender.sendMessage(Component.text("✘ Gagal membuat full backup: " + e.getMessage(), NamedTextColor.RED))
+                    sender.sendMessage(Component.text("✘ Gagal membuat core backup: " + e.getMessage(), NamedTextColor.RED))
                 );
             }
         });
@@ -176,13 +176,13 @@ public class BackupManager {
         File[] dbFiles = dbBackupDir.listFiles((dir, name) -> name.endsWith(".db"));
 
         sender.sendMessage(Component.text("─── Daftar Snapshot Backup Kala Nusantara ───", NamedTextColor.GOLD));
-        sender.sendMessage(Component.text("• Full Server Backups (ZIP):", NamedTextColor.YELLOW));
+        sender.sendMessage(Component.text("• Core State Backups (DB + Configs + Manifest ZIP):", NamedTextColor.YELLOW));
         if (fullFiles != null && fullFiles.length > 0) {
             for (File f : fullFiles) {
                 sender.sendMessage(Component.text("  - " + f.getName() + " §7(" + (f.length() / 1024) + " KB)", NamedTextColor.GRAY));
             }
         } else {
-            sender.sendMessage(Component.text("  (Belum ada full backup ZIP)", NamedTextColor.DARK_GRAY));
+            sender.sendMessage(Component.text("  (Belum ada core backup ZIP)", NamedTextColor.DARK_GRAY));
         }
 
         sender.sendMessage(Component.text("• Database Snapshots (DB):", NamedTextColor.YELLOW));
@@ -196,16 +196,68 @@ public class BackupManager {
     }
 
     /**
-     * Memverifikasi integritas file backup ZIP (Audit V8)
+     * Memverifikasi integritas file backup ZIP beserta pencocokan SHA-256 database (Audit V8/V9).
      */
     public boolean verifyBackup(File zipFile) {
         if (!zipFile.exists() || zipFile.length() == 0) return false;
         try (ZipFile zf = new ZipFile(zipFile)) {
-            boolean hasDb = zf.getEntry("kala_data.db") != null;
-            boolean hasManifest = zf.getEntry("manifest.json") != null;
-            return hasDb && hasManifest;
-        } catch (IOException e) {
-            log.warning("[BackupManager] File backup corrupt/gagal diverifikasi: " + zipFile.getName());
+            ZipEntry dbEntry = zf.getEntry("kala_data.db");
+            ZipEntry manifestEntry = zf.getEntry("manifest.json");
+            if (dbEntry == null || manifestEntry == null) {
+                return false;
+            }
+
+            // Hitung SHA-256 dari entry kala_data.db di dalam ZIP
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream is = zf.getInputStream(dbEntry)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = is.read(buffer)) > 0) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            byte[] hash = digest.digest();
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            String actualDbSha256 = sb.toString();
+
+            // Baca manifest.json
+            String manifestJson;
+            try (InputStream is = zf.getInputStream(manifestEntry);
+                 ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[1024];
+                int read;
+                while ((read = is.read(buffer)) > 0) {
+                    baos.write(buffer, 0, read);
+                }
+                manifestJson = baos.toString("UTF-8");
+            }
+
+            // Ekstrak database_sha256 dari manifest.json
+            String expectedSha256 = null;
+            for (String line : manifestJson.split("\n")) {
+                line = line.trim();
+                if (line.contains("\"database_sha256\"")) {
+                    int colon = line.indexOf(':');
+                    if (colon != -1) {
+                        String rawVal = line.substring(colon + 1).replace("\"", "").replace(",", "").trim();
+                        expectedSha256 = rawVal;
+                        break;
+                    }
+                }
+            }
+
+            if (expectedSha256 == null || !expectedSha256.equalsIgnoreCase(actualDbSha256)) {
+                log.warning("[BackupManager] Mismatch SHA-256 pada backup " + zipFile.getName() +
+                        ": expected=" + expectedSha256 + ", actual=" + actualDbSha256);
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            log.warning("[BackupManager] File backup corrupt/gagal diverifikasi: " + zipFile.getName() + " (" + e.getMessage() + ")");
             return false;
         }
     }

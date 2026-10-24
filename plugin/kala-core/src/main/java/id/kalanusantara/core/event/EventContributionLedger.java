@@ -114,6 +114,15 @@ public class EventContributionLedger {
         log.info("[EventLedger] Menuntaskan payout PENDING untuk claim: " + claimId + " (" + uuid + ")");
         plugin.getEconomy().deposit(uuid, amount, "Rekonsiliasi hadiah event " + eventId);
 
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && p.isOnline()) {
+                p.giveExp(exp);
+            } else if (exp > 0) {
+                plugin.getStorageManager().recordRewardEntitlement(uuid, "EVENT_EXP", (claimId != null ? claimId : (eventId + "_" + uuid)), 0.0, exp);
+            }
+        });
+
         // Update status menjadi PAID
         String updateSql = "UPDATE event_claims SET status = 'PAID', paid_at = ? WHERE claim_id = ? OR (event_id = ? AND uuid = ?)";
         try (Connection conn = plugin.getStorageManager().ensureConnection();
@@ -298,6 +307,8 @@ public class EventContributionLedger {
                                     player.sendMessage(Component.text("Kontribusi: §e" + points + " Poin §7| Pengali: §a" + String.format("%.1fx", multiplier), NamedTextColor.GRAY));
                                     player.sendMessage(Component.text("Hadiah: §6+Rp " + String.format("%.0f", totalRupiah) + " Rupiah Kala §7dan §b+" + totalExp + " EXP", NamedTextColor.YELLOW));
                                     player.sendMessage(Component.empty());
+                                } else if (totalExp > 0) {
+                                    plugin.getStorageManager().recordRewardEntitlement(uuid, "EVENT_EXP", claimId, 0.0, totalExp);
                                 }
                             });
                         } else {

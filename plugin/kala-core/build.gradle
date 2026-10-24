@@ -16,6 +16,7 @@ repositories {
     mavenCentral()
     maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
     maven { url = uri('https://repo.extendedclip.com/content/repositories/placeholderapi/') }
+    maven { url = uri('https://jitpack.io') }
 }
 
 dependencies {
@@ -25,14 +26,16 @@ dependencies {
     // PlaceholderAPI (soft-depend)
     compileOnly 'me.clip:placeholderapi:2.11.6'
 
-    // Vault API (from server plugin)
-    compileOnly files('../../server/plugins/VaultUnlocked-2.20.2.jar')
+    // Vault API (Audit V9 P0 Fix: Official maven artifact, no local jar dependency)
+    compileOnly 'com.github.MilkBowl:VaultAPI:1.7.1'
 
     // SQLite JDBC (bundled in JAR)
     implementation 'org.xerial:sqlite-jdbc:3.43.0.0'
 
-    // Testing (V7)
+    // Testing (V7/V9)
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
+    testImplementation 'com.github.MilkBowl:VaultAPI:1.7.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

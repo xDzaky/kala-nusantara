@@ -85,6 +85,14 @@ public class PlayerJoinListener implements Listener {
                 if (plugin.getKalaEventManager() != null) {
                     plugin.getKalaEventManager().showBossBarToPlayer(player);
                 }
+                if (plugin.getVillageContractManager() != null) {
+                    plugin.getVillageContractManager().loadPlayerProgress(player.getUniqueId());
+                }
+                if (plugin.getDiscoveryManager() != null) {
+                    plugin.getDiscoveryManager().loadPlayerDiscoveries(player.getUniqueId());
+                }
+                // Claim pending entitlements if player was offline when reward occurred (Audit V9)
+                plugin.getStorageManager().claimPendingEntitlements(player, plugin.getEconomy());
             });
         });
     }
@@ -104,6 +112,9 @@ public class PlayerJoinListener implements Listener {
         // Flush quest progress ke DB
         plugin.getQuestProgressTracker().onLogout(player);
         plugin.getCosmeticManager().unloadPlayer(player.getUniqueId());
+        if (plugin.getVillageContractManager() != null) {
+            plugin.getVillageContractManager().onPlayerQuit(player.getUniqueId());
+        }
         // Update playtime dan simpan profil
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             plugin.getIdentityManager().get(player.getUniqueId()).ifPresent(p -> {

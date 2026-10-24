@@ -1,33 +1,33 @@
 {
-  "format_version": "1",
-  "items": {
-    "kala:kompas_pengembara": {
+  "format_version": "2",
+  "items": [
+    {
       "name": "Kompas Pengembara",
-      "bedrock_id": "kala:kompas_pengembara",
-      "bedrock_data": 0,
-      "icon": "kompas_pengembara",
-      "vanilla_fallback": "minecraft:compass"
+      "java_item": "minecraft:compass",
+      "bedrock_item": "kala:kompas_pengembara",
+      "custom_model_data": 10001,
+      "icon": "kompas_pengembara"
     },
-    "kala:kit_survei": {
+    {
       "name": "Kit Survei Lapangan",
-      "bedrock_id": "kala:kit_survei",
-      "bedrock_data": 0,
-      "icon": "kit_survei",
-      "vanilla_fallback": "minecraft:spyglass"
+      "java_item": "minecraft:spyglass",
+      "bedrock_item": "kala:kit_survei",
+      "custom_model_data": 10002,
+      "icon": "kit_survei"
     },
-    "kala:lampu_suar": {
+    {
       "name": "Lampu Suar Pesisir",
-      "bedrock_id": "kala:lampu_suar",
-      "bedrock_data": 0,
-      "icon": "lampu_suar",
-      "vanilla_fallback": "minecraft:lantern"
+      "java_item": "minecraft:lantern",
+      "bedrock_item": "kala:lampu_suar",
+      "custom_model_data": 10003,
+      "icon": "lampu_suar"
     },
-    "kala:kerudung_abu": {
+    {
       "name": "Kerudung Abu Vulkanik",
-      "bedrock_id": "kala:kerudung_abu",
-      "bedrock_data": 0,
-      "icon": "kerudung_abu",
-      "vanilla_fallback": "minecraft:leather_helmet"
+      "java_item": "minecraft:leather_helmet",
+      "bedrock_item": "kala:kerudung_abu",
+      "custom_model_data": 10004,
+      "icon": "kerudung_abu"
     }
-  }
+  ]
 }

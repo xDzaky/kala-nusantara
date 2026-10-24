@@ -1,9 +1,11 @@
 package id.kalanusantara.core.storage;
 
 import id.kalanusantara.core.KalaCorePlugin;
+import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.sql.*;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 /**
@@ -221,17 +223,33 @@ public class StorageManager {
                 expiry INTEGER NOT NULL
             )
             """,
-            // Progres Kontrak Pemain (V8)
+            // Progres Kontrak Pemain (V8/V9)
             """
             CREATE TABLE IF NOT EXISTS player_contract_progress (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 uuid TEXT NOT NULL,
+                week_id TEXT NOT NULL DEFAULT 'WEEK_INITIAL',
                 contract_id TEXT NOT NULL,
                 current_count INTEGER DEFAULT 0,
                 completed INTEGER DEFAULT 0,
                 claimed INTEGER DEFAULT 0,
                 completed_at INTEGER,
-                UNIQUE(uuid, contract_id)
+                UNIQUE(uuid, week_id, contract_id)
+            )
+            """,
+            // Entitlements Hadiah Tertunda Pemain Offline (Audit V9 P0/P1)
+            """
+            CREATE TABLE IF NOT EXISTS player_reward_entitlements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                reward_rupiah REAL NOT NULL DEFAULT 0.0,
+                reward_exp INTEGER NOT NULL DEFAULT 0,
+                claimed INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                claimed_at INTEGER,
+                UNIQUE(uuid, source, source_id)
             )
             """
         };
@@ -243,6 +261,9 @@ public class StorageManager {
             // Migrations:
             try {
                 st.execute("ALTER TABLE quest_progress ADD COLUMN step_count INTEGER DEFAULT 0");
+            } catch (SQLException ignored) {}
+            try {
+                st.execute("ALTER TABLE player_contract_progress ADD COLUMN week_id TEXT DEFAULT 'WEEK_INITIAL'");
             } catch (SQLException ignored) {}
 
             // Migrations untuk event_claims (V8 Outbox pattern)
@@ -288,6 +309,81 @@ public class StorageManager {
             log.severe("Gagal cek koneksi: " + e.getMessage());
         }
         return connection;
+    }
+
+    /**
+     * Mencatat entitlement hadiah saat pemain offline atau transaksi tertunda (Audit V9 P0/P1)
+     */
+    public void recordRewardEntitlement(UUID uuid, String source, String sourceId, double rewardRupiah, int rewardExp) {
+        String sql = """
+            INSERT INTO player_reward_entitlements (uuid, source, source_id, reward_rupiah, reward_exp, claimed, created_at)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
+            ON CONFLICT(uuid, source, source_id) DO NOTHING;
+        """;
+        synchronized (dbLock) {
+            try (Connection conn = ensureConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, source);
+                ps.setString(3, sourceId);
+                ps.setDouble(4, rewardRupiah);
+                ps.setInt(5, rewardExp);
+                ps.setLong(6, System.currentTimeMillis());
+                ps.executeUpdate();
+                log.info("[StorageManager] Tercatat reward entitlement offline untuk " + uuid + " (" + source + ":" + sourceId + ")");
+            } catch (SQLException e) {
+                log.severe("[StorageManager] Gagal mencatat reward entitlement: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Memproses dan memberikan hak hadiah tertunda kepada pemain saat kembali online
+     */
+    public void claimPendingEntitlements(Player player, id.kalanusantara.core.economy.RupiahEconomy economy) {
+        if (player == null || !player.isOnline()) return;
+        UUID uuid = player.getUniqueId();
+        String selectSql = "SELECT id, source, source_id, reward_rupiah, reward_exp FROM player_reward_entitlements WHERE uuid = ? AND claimed = 0";
+        String updateSql = "UPDATE player_reward_entitlements SET claimed = 1, claimed_at = ? WHERE id = ? AND claimed = 0";
+
+        synchronized (dbLock) {
+            try (Connection conn = ensureConnection();
+                 PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        int id = rs.getInt("id");
+                        String source = rs.getString("source");
+                        double rupiah = rs.getDouble("reward_rupiah");
+                        int exp = rs.getInt("reward_exp");
+
+                        try (PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
+                            updatePs.setLong(1, System.currentTimeMillis());
+                            updatePs.setInt(2, id);
+                            int updated = updatePs.executeUpdate();
+                            if (updated > 0) {
+                                org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+                                    if (player.isOnline()) {
+                                        if (rupiah > 0 && economy != null) {
+                                            economy.deposit(uuid, rupiah, "Entitlement Klaim Tertunda: " + source);
+                                        }
+                                        if (exp > 0) {
+                                            player.giveExp(exp);
+                                        }
+                                        player.sendMessage(net.kyori.adventure.text.Component.text(
+                                            "✦ Kamu menerima hadiah tertunda (" + source + "): +Rp " + String.format("%,.0f", rupiah) + " & +" + exp + " EXP!",
+                                            net.kyori.adventure.text.format.NamedTextColor.GOLD
+                                        ));
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                log.warning("[StorageManager] Gagal memeriksa pending entitlements: " + e.getMessage());
+            }
+        }
     }
 
     /**

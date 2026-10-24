@@ -1,7 +1,8 @@
 pack_name: "Kala Nusantara Unified Resource Pack"
-version: "8.0.0"
-date: "2026-10-24"
-engine_target: "PaperMC 26.3 + Geyser 2.12.0"
+version: "9.0.0"
+date: "2026-10-25"
+engine_target: "PaperMC 26.3 + Geyser 2.12.0 (Custom Items v2)"
+mappings_format: "geyser_v2"
 checksums:
   java_pack_sha256: "pending_distribution_build"
   bedrock_pack_sha256: "pending_distribution_build"

@@ -18,8 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
- * NusantaraDiscoveryManager — Mengelola Katalog Penemuan Nusantara (Audit V8).
+ * NusantaraDiscoveryManager — Mengelola Katalog Penemuan Nusantara (Audit V8/V9).
  * Memberikan progresi jangka panjang observasi satwa, landmark, dan sampel geologi tanpa kekerasan.
+ * SQLite sebagai Single Source of Truth (SSOT), dengan fallback entitlement bila pemain offline.
  */
 public class NusantaraDiscoveryManager {
 
@@ -59,9 +60,8 @@ public class NusantaraDiscoveryManager {
 
         Set<String> set = playerDiscoveries.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
         if (set.contains(key)) {
-            return false; // Sudah pernah ditemukan
+            return false; // Sudah pernah ditemukan dalam cache lokal
         }
-        set.add(key);
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             String sql = "INSERT OR IGNORE INTO nusantara_discoveries (uuid, discovery_type, entry_id, island, discovered_at) VALUES (?, ?, ?, ?, ?)";
@@ -76,6 +76,9 @@ public class NusantaraDiscoveryManager {
                     int inserted = ps.executeUpdate();
 
                     if (inserted > 0) {
+                        // DB insertion succeeded — commit to local cache (SSOT alignment)
+                        set.add(key);
+
                         Bukkit.getScheduler().runTask(plugin, () -> {
                             if (player.isOnline()) {
                                 player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.2f);
@@ -88,6 +91,9 @@ public class NusantaraDiscoveryManager {
 
                                 plugin.getEconomy().deposit(uuid, 250.0, "Hadiah observasi " + displayName);
                                 player.giveExp(50);
+                            } else {
+                                // Pemain offline saat hadiah siap diberikan: simpan ke player_reward_entitlements
+                                plugin.getStorageManager().recordRewardEntitlement(uuid, "DISCOVERY", key, 250.0, 50);
                             }
                         });
                     }
