@@ -2,29 +2,24 @@ package id.kalanusantara.core.event;
 
 import id.kalanusantara.core.KalaCorePlugin;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.Collections;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
- * WorldImpactPolicy — Gerbang Tunggal Keamanan Dampak Dunia (Kala Nusantara v6.0).
+ * WorldImpactPolicy — Gerbang Tunggal Keamanan Dampak Dunia (Kala Nusantara v7.0).
  *
- * Mengikuti prinsip Quality Gate & Impact Budget:
+ * Audit V7:
  * - Level 0 (Atmospheric): Zero block modifications di kala_main (default).
- * - Tidak boleh merusak claim pemain, peti/container, redstone, tanaman, atau NPC.
- * - Performance Caps ketat agar TPS tetap 20.0 dan lancar di HP Bedrock:
- *     - Maksimal 6 batu per salvo
- *     - Maksimal 12 hazard aktif
- *     - Maksimal 6 mob encounter
- * - Lifecycle cleanup idempotent dengan NamespacedKey tagging.
+ * - Performance Caps terstandarisasi: 6 batu per salvo, 12 hazard aktif, 6 mob encounter (total maks 24 entitas).
+ * - P1 Fix: Cleanup terisolasi per eventId sehingga penghentian satu event tidak menghapus entitas event lain.
  */
 public class WorldImpactPolicy {
 
@@ -44,6 +39,7 @@ public class WorldImpactPolicy {
     public static final int MAX_ACTIVE_HAZARDS = 12;
     public static final int MAX_ROCKFALL_PER_SALVO = 6;
     public static final int MAX_EVENT_MOBS = 6;
+    public static final int TOTAL_EVENT_ENTITY_CAP = 24;
 
     private final Set<Entity> trackedEntities = ConcurrentHashMap.newKeySet();
 
@@ -80,7 +76,9 @@ public class WorldImpactPolicy {
     public void registerEventEntity(Entity entity, String eventId) {
         if (entity == null) return;
         entity.getPersistentDataContainer().set(EVENT_ENTITY_KEY, PersistentDataType.BYTE, (byte) 1);
-        entity.getPersistentDataContainer().set(EVENT_ID_KEY, PersistentDataType.STRING, eventId);
+        if (eventId != null) {
+            entity.getPersistentDataContainer().set(EVENT_ID_KEY, PersistentDataType.STRING, eventId);
+        }
         trackedEntities.add(entity);
     }
 
@@ -89,23 +87,64 @@ public class WorldImpactPolicy {
         return entity.getPersistentDataContainer().has(EVENT_ENTITY_KEY, PersistentDataType.BYTE);
     }
 
+    public String getEventId(Entity entity) {
+        if (entity == null) return null;
+        return entity.getPersistentDataContainer().get(EVENT_ID_KEY, PersistentDataType.STRING);
+    }
+
     public int getActiveEntityCount() {
         trackedEntities.removeIf(e -> !e.isValid() || e.isDead());
         return trackedEntities.size();
     }
 
     public boolean canSpawnMoreEntities(int upcomingCount) {
-        return (getActiveEntityCount() + upcomingCount) <= MAX_EVENT_MOBS + MAX_ACTIVE_HAZARDS;
+        return (getActiveEntityCount() + upcomingCount) <= TOTAL_EVENT_ENTITY_CAP;
     }
 
     /**
-     * Membersihkan seluruh entity sementara event secara idempotent
+     * P1 Fix: Membersihkan entitas sementara khusus untuk satu eventId tertentu.
+     * Tidak menyentuh entitas milik event lain.
      */
-    public void cleanupAllEventEntities() {
-        cleanupAllEventEntities(null);
+    public void cleanupEvent(String eventId) {
+        if (eventId == null) {
+            cleanupAll();
+            return;
+        }
+
+        int removed = 0;
+        for (Iterator<Entity> it = trackedEntities.iterator(); it.hasNext(); ) {
+            Entity e = it.next();
+            if (e != null && e.isValid()) {
+                String id = getEventId(e);
+                if (eventId.equals(id)) {
+                    e.remove();
+                    it.remove();
+                    removed++;
+                }
+            } else {
+                it.remove();
+            }
+        }
+
+        // Scan darurat terisolasi di world aktif jika ada entitas tertinggal
+        for (World world : Bukkit.getWorlds()) {
+            for (Entity e : world.getEntities()) {
+                if (isEventEntity(e) && eventId.equals(getEventId(e))) {
+                    e.remove();
+                    removed++;
+                }
+            }
+        }
+
+        if (removed > 0) {
+            log.info("[WorldImpactPolicy] Cleanup terisolasi event [" + eventId + "]: " + removed + " entitas dibersihkan.");
+        }
     }
 
-    public void cleanupAllEventEntities(String eventId) {
+    /**
+     * Membersihkan seluruh entitas event secara darurat / saat shutdown server.
+     */
+    public void cleanupAll() {
         int removed = 0;
         for (Entity e : trackedEntities) {
             if (e != null && e.isValid()) {
@@ -115,20 +154,25 @@ public class WorldImpactPolicy {
         }
         trackedEntities.clear();
 
-        // Scan darurat pada world aktif untuk entitas bertag yang mungkin tertinggal
         for (World world : Bukkit.getWorlds()) {
-            if (world.getName().equals("kala_main") || world.getName().equals("kala_resource")) {
-                for (Entity e : world.getEntities()) {
-                    if (isEventEntity(e)) {
-                        e.remove();
-                        removed++;
-                    }
+            for (Entity e : world.getEntities()) {
+                if (isEventEntity(e)) {
+                    e.remove();
+                    removed++;
                 }
             }
         }
 
         if (removed > 0) {
-            log.info("[WorldImpactPolicy] Cleanup selesai: " + removed + " entitas event dibersihkan.");
+            log.info("[WorldImpactPolicy] Emergency Cleanup selesai: " + removed + " entitas dibersihkan.");
         }
+    }
+
+    public void cleanupAllEventEntities() {
+        cleanupAll();
+    }
+
+    public void cleanupAllEventEntities(String eventId) {
+        cleanupEvent(eventId);
     }
 }

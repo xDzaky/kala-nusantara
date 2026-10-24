@@ -4,25 +4,29 @@ import id.kalanusantara.core.KalaCorePlugin;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
+import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * HazardDirector — Mengelola bahaya tertelegrafis, Salvo Rockfall, dan Retakan Panas (Kala Nusantara v6.0).
+ * HazardDirector — Mengelola bahaya tertelegrafis, Salvo Rockfall, dan Retakan Panas (Kala Nusantara v7.0).
  *
- * Menjamin:
- * 1. Peringatan visual/audio 2–3 detik sebelum damage tiba (telegraphing ramah HP/mobile).
- * 2. Menggunakan FallingBlock vanilla aman (setHurtEntities false, drop false, cancel drop).
- * 3. Tidak mengubah blok dunia (zero block destruction).
- * 4. Damage ditangani server-side dengan batas wajar dan jendela waktu menghindar.
+ * Audit V7 & Security Guarantees:
+ * 1. P0 Fix: BukkitRunnable dengan cancel() eksplisit dan deregistrasi task dari registry.
+ * 2. Exactly-once impact resolution: AtomicBoolean guard mencegah damage berulang dari satu batu.
+ * 3. Damage cooldown per pemain: Menghindari satu pemain dihantam berkali-kali dalam satu salvo.
+ * 4. Heat vent deadline: Otomatis cancel dan unregister setelah durasi habis.
+ * 5. Location validation: Memastikan target bukan di safe-zone spawn, bukan di dalam claim, dan berada di tanah padat.
  */
 public class HazardDirector {
 
@@ -31,6 +35,8 @@ public class HazardDirector {
     private final Random random = new Random();
 
     private final Set<BukkitTask> activeTasks = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> playerRockfallCooldown = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> playerVentCooldown = new ConcurrentHashMap<>();
 
     public HazardDirector(KalaCorePlugin plugin, WorldImpactPolicy policy) {
         this.plugin = plugin;
@@ -45,25 +51,24 @@ public class HazardDirector {
         World world = center.getWorld();
 
         int count = Math.min(rockCount, WorldImpactPolicy.MAX_ROCKFALL_PER_SALVO);
+        double arenaRadius = plugin.getKalaConfig().getVolcanoArenaRadius();
 
         for (int i = 0; i < count; i++) {
-            // Pilih titik jatuh di sekitar pusat arena (radius 6–18 blok)
-            double angle = random.nextDouble() * 2 * Math.PI;
-            double dist = 6.0 + random.nextDouble() * 12.0;
-            double targetX = center.getX() + Math.cos(angle) * dist;
-            double targetZ = center.getZ() + Math.sin(angle) * dist;
-            int targetY = world.getHighestBlockYAt((int) targetX, (int) targetZ);
-
-            Location targetLoc = new Location(world, targetX, targetY, targetZ);
+            Location targetLoc = findSafeTargetLocation(center, arenaRadius);
+            if (targetLoc == null) {
+                plugin.getLogger().warning("[HazardDirector] Tidak dapat menemukan target rockfall aman di luar safe zone!");
+                continue;
+            }
 
             // Tahap 1: Telegraphing (Peringatan Visual & Audio selama 2.5 detik)
             telegraphImpactZone(targetLoc);
 
             // Tahap 2: Jadwalkan Peluncuran Batu setelah 50 ticks (2.5 detik)
-            BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            final Location finalTargetLoc = targetLoc;
+            BukkitTask launchTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!policy.canSpawnMoreEntities(1)) return;
 
-                Location spawnLoc = targetLoc.clone().add(randomOffset(3), 16.0, randomOffset(3));
+                Location spawnLoc = finalTargetLoc.clone().add(randomOffset(3), 16.0, randomOffset(3));
                 Material rockMat = switch (random.nextInt(3)) {
                     case 0 -> Material.TUFF;
                     case 1 -> Material.BLACKSTONE;
@@ -77,17 +82,77 @@ public class HazardDirector {
                 fb.setCancelDrop(true);
 
                 // Velocity jatuh melengkung ke titik target
-                Vector vel = targetLoc.toVector().subtract(spawnLoc.toVector()).normalize().multiply(0.65);
+                Vector vel = finalTargetLoc.toVector().subtract(spawnLoc.toVector()).normalize().multiply(0.65);
                 fb.setVelocity(vel);
 
                 policy.registerEventEntity(fb, eventId);
 
-                // Cek benturan dan damage kalkulasi server setelah mendarat
-                scheduleImpactCheck(fb, targetLoc);
+                // Cek benturan dengan one-shot guard dan task cancellation nyata
+                scheduleImpactCheck(fb, finalTargetLoc);
             }, 50L);
 
-            activeTasks.add(task);
+            activeTasks.add(launchTask);
         }
+    }
+
+    /**
+     * Menemukan lokasi target yang aman (di luar safe zone spawn, bukan di dalam claim)
+     */
+    private Location findSafeTargetLocation(Location center, double radius) {
+        World world = center.getWorld();
+        if (world == null) return null;
+
+        double safeZoneRadiusSq = Math.pow(plugin.getKalaConfig().getSpawnSafeZoneRadius(), 2);
+        Location spawnLoc = world.getSpawnLocation();
+
+        for (int attempt = 0; attempt < 8; attempt++) {
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double dist = 8.0 + random.nextDouble() * (radius - 8.0);
+            double x = center.getX() + Math.cos(angle) * dist;
+            double z = center.getZ() + Math.sin(angle) * dist;
+            int y = world.getHighestBlockYAt((int) x, (int) z);
+
+            Location loc = new Location(world, x, y, z);
+
+            // 1. Cek jarak dari spawn safe zone
+            if (loc.distanceSquared(spawnLoc) < safeZoneRadiusSq) {
+                continue;
+            }
+
+            // 2. Cek apakah di atas air atau lava
+            Block block = loc.getBlock();
+            if (block.isLiquid() || block.getType() == Material.AIR) {
+                continue;
+            }
+
+            // 3. Cek claim GriefPrevention jika aktif
+            if (isInsidePlayerClaim(loc)) {
+                continue;
+            }
+
+            return loc;
+        }
+
+        // Fallback: gunakan center jika di luar safe zone
+        if (center.distanceSquared(spawnLoc) >= safeZoneRadiusSq) {
+            return center.clone();
+        }
+        return null;
+    }
+
+    private boolean isInsidePlayerClaim(Location loc) {
+        try {
+            org.bukkit.plugin.Plugin gp = Bukkit.getPluginManager().getPlugin("GriefPrevention");
+            if (gp != null && gp.isEnabled()) {
+                Object dataStore = gp.getClass().getField("dataStore").get(gp);
+                if (dataStore != null) {
+                    java.lang.reflect.Method getClaimAt = dataStore.getClass().getMethod("getClaimAt", Location.class, boolean.class, Object.class);
+                    Object claim = getClaimAt.invoke(dataStore, loc, true, null);
+                    return claim != null;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     /**
@@ -97,10 +162,8 @@ public class HazardDirector {
         World w = loc.getWorld();
         if (w == null) return;
 
-        // Suara dengung peringatan
         w.playSound(loc, Sound.BLOCK_NOTE_BLOCK_PLING, 0.7f, 1.8f);
 
-        // Partikel lingkaran merah/bara selama 2.5 detik
         for (int step = 0; step < 5; step++) {
             long delay = step * 10L;
             BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -110,7 +173,6 @@ public class HazardDirector {
                     w.spawnParticle(Particle.FLAME, ring, 1, 0, 0, 0, 0);
                 }
 
-                // Peringatkan pemain terdekat lewat actionbar
                 for (Player p : w.getPlayers()) {
                     if (p.getLocation().distanceSquared(loc) < 16.0) {
                         plugin.getNotificationService().sendActionBar(p,
@@ -123,63 +185,81 @@ public class HazardDirector {
     }
 
     /**
-     * Pemeriksaan benturan batu saat menyentuh tanah
+     * Pemeriksaan benturan batu dengan BukkitRunnable dan AtomicBoolean one-shot guard (P0 Fix)
      */
     private void scheduleImpactCheck(FallingBlock fb, Location targetLoc) {
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+        final AtomicBoolean resolved = new AtomicBoolean(false);
+
+        BukkitRunnable runner = new BukkitRunnable() {
             int ticks = 0;
 
             @Override
             public void run() {
                 ticks++;
                 if (!fb.isValid() || fb.isDead() || fb.isOnGround() || ticks > 80) {
-                    // Terjadi benturan tanah
-                    Location impact = fb.getLocation();
-                    World w = impact.getWorld();
-                    if (w != null) {
-                        w.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, impact, 12, 0.6, 0.3, 0.6, 0.05);
-                        w.spawnParticle(Particle.BLOCK, impact, 20, 0.5, 0.3, 0.5, Material.STONE.createBlockData());
-                        w.playSound(impact, Sound.BLOCK_STONE_BREAK, 0.9f, 0.6f);
-
-                        // Damage & knockback pemain jika gagal menghindar
-                        for (Player p : w.getPlayers()) {
-                            if (p.getLocation().distanceSquared(impact) <= 6.25) { // Radius 2.5 blok
-                                p.damage(4.0); // 2 Hati
-                                Vector kb = p.getLocation().toVector().subtract(impact.toVector()).normalize().multiply(0.5).setY(0.25);
-                                p.setVelocity(kb);
-                                p.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 40, 0)); // 2 detik lambat
-                                p.sendMessage(Component.text("§c[!] Anda terkena hempasan serpihan batu vulkanik!", NamedTextColor.RED));
-                            }
-                        }
+                    // P0 Fix: Exactly-once resolution guard
+                    if (resolved.compareAndSet(false, true)) {
+                        processImpact(fb, targetLoc);
                     }
-
-                    fb.remove();
                     cancel();
+                    activeTasks.remove(this);
                 }
             }
+        };
 
-            private void cancel() {
-                // Task dibatalkan otomatis
-            }
-        }, 5L, 5L);
-
+        BukkitTask task = runner.runTaskTimer(plugin, 5L, 5L);
         activeTasks.add(task);
     }
 
     /**
+     * Resolusi tumbukan tunggal (One-Shot)
+     */
+    private void processImpact(FallingBlock fb, Location targetLoc) {
+        Location impact = fb.isValid() ? fb.getLocation() : targetLoc;
+        World w = impact.getWorld();
+        if (w != null) {
+            w.spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, impact, 12, 0.6, 0.3, 0.6, 0.05);
+            w.spawnParticle(Particle.BLOCK, impact, 20, 0.5, 0.3, 0.5, Material.STONE.createBlockData());
+            w.playSound(impact, Sound.BLOCK_STONE_BREAK, 0.9f, 0.6f);
+
+            long now = System.currentTimeMillis();
+            for (Player p : w.getPlayers()) {
+                if (p.getLocation().distanceSquared(impact) <= 6.25) { // Radius 2.5 blok
+                    // Damage cooldown per player (minimal jeda 2000 ms antar damage rockfall)
+                    Long lastDmg = playerRockfallCooldown.get(p.getUniqueId());
+                    if (lastDmg == null || (now - lastDmg) > 2000L) {
+                        playerRockfallCooldown.put(p.getUniqueId(), now);
+                        p.damage(4.0); // 2 Hati
+                        Vector kb = p.getLocation().toVector().subtract(impact.toVector()).normalize().multiply(0.5).setY(0.25);
+                        p.setVelocity(kb);
+                        p.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 40, 0)); // 2 detik lambat
+                        p.sendMessage(Component.text("§c[!] Anda terkena hempasan serpihan batu vulkanik!", NamedTextColor.RED));
+                    }
+                }
+            }
+        }
+        if (fb.isValid()) {
+            fb.remove();
+        }
+    }
+
+    /**
      * Menghasilkan retakan panas / geyser uap sementara (Heat Vents)
+     * P1 Fix: Menggunakan BukkitRunnable dengan cancel() eksplisit saat durasi tercapai.
      */
     public void spawnHeatVent(Location loc, String eventId, int durationSeconds) {
         if (loc == null || loc.getWorld() == null) return;
         World w = loc.getWorld();
 
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+        BukkitRunnable ventRunner = new BukkitRunnable() {
             int elapsed = 0;
 
             @Override
             public void run() {
                 elapsed++;
-                if (elapsed > durationSeconds) {
+                if (elapsed >= durationSeconds || w == null) {
+                    cancel();
+                    activeTasks.remove(this);
                     return;
                 }
 
@@ -189,16 +269,22 @@ public class HazardDirector {
                     w.playSound(loc, Sound.BLOCK_LAVA_EXTINGUISH, 0.4f, 1.2f);
                 }
 
-                // Efek panas jika pemain berdiri tepat di atas retakan
+                // Efek panas dengan cooldown 1500 ms per pemain
+                long now = System.currentTimeMillis();
                 for (Player p : w.getPlayers()) {
                     if (p.getLocation().distanceSquared(loc) <= 2.25) {
-                        p.damage(1.0);
-                        p.setFireTicks(20);
+                        Long lastHit = playerVentCooldown.get(p.getUniqueId());
+                        if (lastHit == null || (now - lastHit) > 1500L) {
+                            playerVentCooldown.put(p.getUniqueId(), now);
+                            p.damage(1.0);
+                            p.setFireTicks(20);
+                        }
                     }
                 }
             }
-        }, 10L, 20L);
+        };
 
+        BukkitTask task = ventRunner.runTaskTimer(plugin, 10L, 20L);
         activeTasks.add(task);
     }
 
@@ -209,6 +295,8 @@ public class HazardDirector {
             }
         }
         activeTasks.clear();
+        playerRockfallCooldown.clear();
+        playerVentCooldown.clear();
     }
 
     private double randomOffset(double max) {

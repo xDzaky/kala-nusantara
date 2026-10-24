@@ -39,24 +39,42 @@ public class KalaNotificationService {
     // Notification preferences: playerUUID -> allowTips
     private final Map<UUID, Boolean> tipsEnabled = new ConcurrentHashMap<>();
 
+    // Map untuk melacak level prioritas title aktif per pemain dan waktu berakhirnya
+    private final Map<UUID, Priority> currentTitlePriority = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> currentTitleExpiry = new ConcurrentHashMap<>();
+
     public KalaNotificationService(KalaCorePlugin plugin) {
         this.plugin = plugin;
     }
 
     /**
-     * Kirim title ke pemain dengan validasi prioritas dan cooldown
+     * Kirim title ke pemain dengan validasi prioritas, preemption, dan cooldown (V7)
      */
     public void sendTitle(Player player, Priority priority, Component title, Component subtitle) {
         if (player == null || !player.isOnline()) return;
+        UUID uuid = player.getUniqueId();
+        long now = System.currentTimeMillis();
+
+        // Cek apakah ada title berprioritas lebih tinggi yang masih aktif
+        Priority activePri = currentTitlePriority.get(uuid);
+        Long expiry = currentTitleExpiry.get(uuid);
+        if (activePri != null && expiry != null && now < expiry) {
+            if (priority.getLevel() < activePri.getLevel()) {
+                // Alihkan pesan prioritas lebih rendah ke ActionBar agar tidak menimpa Story/System event
+                sendActionBar(player, title);
+                return;
+            }
+        }
 
         // Cek preferensi pemain untuk notifikasi tips/kosmetik
-        if (priority == Priority.TIPS_COSMETIC && !isTipsEnabled(player.getUniqueId())) {
-            // Jika pemain mematikan tips, alihkan ke actionbar ringan saja
-            player.sendActionBar(title);
+        if (priority == Priority.TIPS_COSMETIC && !isTipsEnabled(uuid)) {
+            sendActionBar(player, title);
             return;
         }
 
-        // Title standard timing: 10 ticks fadeIn, 60 ticks stay, 20 ticks fadeOut
+        currentTitlePriority.put(uuid, priority);
+        currentTitleExpiry.put(uuid, now + 3500L); // 3.5 detik durasi tayang
+
         Title.Times times = Title.Times.times(
                 Duration.ofMillis(500),
                 Duration.ofMillis(3000),
@@ -80,7 +98,7 @@ public class KalaNotificationService {
     }
 
     /**
-     * Kirim actionbar dengan deduplikasi 3 detik agar tidak spam
+     * Kirim actionbar dengan deduplikasi 2.5 detik agar tidak spam
      */
     public void sendActionBar(Player player, Component message) {
         if (player == null || !player.isOnline()) return;
@@ -98,11 +116,11 @@ public class KalaNotificationService {
     }
 
     /**
-     * Broadcast actionbar ke semua pemain
+     * Broadcast actionbar ke semua pemain dengan deduplikasi terukur
      */
     public void broadcastActionBar(Component message) {
         for (Player p : Bukkit.getOnlinePlayers()) {
-            p.sendActionBar(message);
+            sendActionBar(p, message);
         }
     }
 

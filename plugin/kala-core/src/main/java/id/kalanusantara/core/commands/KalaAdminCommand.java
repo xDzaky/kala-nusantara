@@ -1,6 +1,7 @@
 package id.kalanusantara.core.commands;
 
 import id.kalanusantara.core.KalaCorePlugin;
+import id.kalanusantara.core.event.WorldImpactPolicy;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -395,10 +396,13 @@ public class KalaAdminCommand implements CommandExecutor {
             }
             case "status" -> {
                 sender.sendMessage(Component.text("─── KalaCore Status ───", NamedTextColor.GOLD));
-                sender.sendMessage(Component.text("Versi: " + plugin.getDescription().getVersion(), NamedTextColor.WHITE));
+                sender.sendMessage(Component.text("Versi: " + plugin.getDescription().getVersion() + " (V7 Robust)", NamedTextColor.WHITE));
                 sender.sendMessage(Component.text("Pemain online: " + Bukkit.getOnlinePlayers().size(), NamedTextColor.WHITE));
                 sender.sendMessage(Component.text("Quest terdaftar: " + plugin.getQuestManager().getAllQuests().size(), NamedTextColor.WHITE));
                 sender.sendMessage(Component.text("NPC aktif: " + plugin.getNpcManager().getSpawnedNpcs().size(), NamedTextColor.WHITE));
+                sender.sendMessage(Component.text("Entitas Event Aktif: " + plugin.getWorldImpactPolicy().getActiveEntityCount() + " / " + WorldImpactPolicy.TOTAL_EVENT_ENTITY_CAP, NamedTextColor.AQUA));
+                sender.sendMessage(Component.text("Gunung Murka: " + plugin.getKalaEventManager().getCurrentPhase().getDisplayName(), NamedTextColor.YELLOW));
+                sender.sendMessage(Component.text("Event Musiman: " + plugin.getSeasonalEventDirector().getActiveEvent().getDisplayName(), NamedTextColor.YELLOW));
                 sender.sendMessage(Component.text("Debug: " + plugin.getKalaConfig().isDebugMode(), NamedTextColor.WHITE));
             }
             default -> sendHelp(sender);

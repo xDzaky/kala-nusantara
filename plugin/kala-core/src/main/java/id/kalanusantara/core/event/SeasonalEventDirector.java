@@ -1,8 +1,8 @@
 package id.kalanusantara.core.event;
 
 import id.kalanusantara.core.KalaCorePlugin;
+import id.kalanusantara.core.kala.KalaEventManager;
 import id.kalanusantara.core.notify.KalaNotificationService;
-import id.kalanusantara.core.season.SeasonManager;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -12,6 +12,7 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
@@ -19,14 +20,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
- * SeasonalEventDirector — Pengarah Mikro-Event Bencana Musiman Berbasis Gameplay (Kala Nusantara v6.0).
+ * SeasonalEventDirector — Pengarah Mikro-Event Bencana Musiman Berbasis Gameplay (Kala Nusantara v7.0).
  *
- * Mengikuti kalender SeasonManager KalaCore yang ada (8 minggu).
- * Mengatur 2 MVP Mikro-Event:
- * 1. BADAI_SELAT: Angin, kabut pesisir, mengamankan peti hanyut (driftwood) & menyalakan sinyal suar.
- * 2. ABU_DAN_BARA: Abu vulkanik, titik bara semu yang perlu dipadamkan, & pengumpulan sampel abu.
- *
- * Sesuai WorldImpactPolicy Level 0: Nol kerusakan blok pada kala_main, murni gameplay partisipatif.
+ * Audit V7:
+ * 1. P1 Fix: objectiveTarget dinamis yang selalu sesuai dengan jumlah objective yang benar-benar di-spawn.
+ * 2. P1 Fix: Weather Lease & Snapshot persis mengembalikan cuaca awal (hasStorm, isThundering, duration).
+ * 3. P1 Fix: Eksklusivitas event (tidak boleh bentrok dengan erupsi Gunung Murka).
+ * 4. P1 Fix: Sampel abu vulkanik diberi tag persisten PersistentDataContainer (bukan plain item).
+ * 5. P1 Fix: Cleanup terisolasi per eventId.
  */
 public class SeasonalEventDirector {
 
@@ -58,22 +59,29 @@ public class SeasonalEventDirector {
     private int eventRemainingSeconds = 0;
     private int eventTotalSeconds = 0;
 
-    private int objectiveTarget = 15;
+    private int objectiveTarget = 0;
     private int objectiveCurrent = 0;
+
+    // Snapshot cuaca awal
+    private boolean savedStormState = false;
+    private boolean savedThunderingState = false;
+    private int savedWeatherDuration = 6000;
 
     private BukkitTask eventTickTask;
     private BukkitTask atmosphericTask;
     private BossBar seasonalBossBar;
 
-    // Lokasi hotspot aktif (misal bara semu atau peti hanyut)
     private final List<Location> activeHotspots = Collections.synchronizedList(new ArrayList<>());
     private final Set<Item> spawnedEventItems = ConcurrentHashMap.newKeySet();
+
+    private final NamespacedKey CUSTOM_ITEM_KEY;
 
     public SeasonalEventDirector(KalaCorePlugin plugin, WorldImpactPolicy policy, EventContributionLedger ledger) {
         this.plugin = plugin;
         this.policy = policy;
         this.ledger = ledger;
         this.log = plugin.getLogger();
+        this.CUSTOM_ITEM_KEY = new NamespacedKey(plugin, "custom_item_id");
         initBossBar();
     }
 
@@ -91,30 +99,36 @@ public class SeasonalEventDirector {
     // ─────────────────────────────────────────────
 
     public boolean startEvent(SeasonalEventType type) {
+        if (type == SeasonalEventType.NONE) return false;
+
+        // P1 Fix: Eksklusivitas event — jangan tumpang tindih dengan erupsi Gunung Murka
+        if (plugin.getKalaEventManager() != null && plugin.getKalaEventManager().getCurrentPhase() != KalaEventManager.KalaPhase.IDLE) {
+            log.warning("[SeasonalDirector] Ditolak: Tidak dapat memulai event musiman saat Gunung Murka sedang aktif!");
+            return false;
+        }
+
         if (activeEvent != SeasonalEventType.NONE) {
             stopEvent();
         }
 
-        if (type == SeasonalEventType.NONE) return false;
-
         this.activeEvent = type;
         this.currentEventId = "season_" + type.name().toLowerCase() + "_" + System.currentTimeMillis();
         this.objectiveCurrent = 0;
-        this.objectiveTarget = Math.max(10, Bukkit.getOnlinePlayers().size() * 4);
         this.eventTotalSeconds = 300; // 5 menit
         this.eventRemainingSeconds = eventTotalSeconds;
 
-        log.info("[SeasonalDirector] Memulai Event Musiman: " + type.getSimpleName() + " (ID: " + currentEventId + ")");
+        // Setup Skenario & kalkulasi target nyata
+        setupEventScenario(type);
+
+        log.info("[SeasonalDirector] Memulai Event Musiman: " + type.getSimpleName() +
+                " (ID: " + currentEventId + ", Target Realistis: " + objectiveTarget + ")");
 
         // Notifikasi dan Pengumuman
         announceStart(type);
         updateBossBar();
         showBossBarToAll();
 
-        // Spawn Hotspot dan Mulai Loop
-        setupEventScenario(type);
         startEventLoops();
-
         return true;
     }
 
@@ -124,24 +138,31 @@ public class SeasonalEventDirector {
         SeasonalEventType ended = activeEvent;
         String endedId = currentEventId;
 
-        // Batalkan Task & Bersihkan
-        if (eventTickTask != null) eventTickTask.cancel();
-        if (atmosphericTask != null) atmosphericTask.cancel();
+        // Batalkan Task
+        if (eventTickTask != null) {
+            eventTickTask.cancel();
+            eventTickTask = null;
+        }
+        if (atmosphericTask != null) {
+            atmosphericTask.cancel();
+            atmosphericTask = null;
+        }
 
         hideBossBarFromAll();
-        cleanupSpawnedHotspots();
+        cleanupSpawnedHotspots(endedId);
 
-        // Kembalikan cuaca jika Badai Selat
+        // P1 Fix: Kembalikan kondisi cuaca persis seperti sebelum event
         if (ended == SeasonalEventType.BADAI_SELAT) {
             World world = Bukkit.getWorld("kala_main");
             if (world != null) {
-                world.setStorm(false);
-                world.setThundering(false);
+                world.setStorm(savedStormState);
+                world.setThundering(savedThunderingState);
+                world.setWeatherDuration(savedWeatherDuration);
             }
         }
 
         // Tentukan hasil (Evaluasi Gotong Royong)
-        boolean success = objectiveCurrent >= objectiveTarget;
+        boolean success = objectiveCurrent >= objectiveTarget && objectiveTarget > 0;
         announceEnd(ended, endedId, success);
 
         activeEvent = SeasonalEventType.NONE;
@@ -163,22 +184,35 @@ public class SeasonalEventDirector {
 
     private void setupEventScenario(SeasonalEventType type) {
         activeHotspots.clear();
+        spawnedEventItems.clear();
+
         World world = Bukkit.getWorld("kala_main");
         if (world == null && !Bukkit.getWorlds().isEmpty()) {
             world = Bukkit.getWorlds().get(0);
         }
-        if (world == null) return;
+        if (world == null) {
+            this.objectiveTarget = 0;
+            return;
+        }
 
         Location spawnLoc = world.getSpawnLocation();
+        int online = Bukkit.getOnlinePlayers().size();
 
         if (type == SeasonalEventType.BADAI_SELAT) {
+            // Simpan snapshot cuaca awal
+            savedStormState = world.hasStorm();
+            savedThunderingState = world.isThundering();
+            savedWeatherDuration = world.getWeatherDuration();
+
             world.setStorm(true);
             world.setWeatherDuration(eventTotalSeconds * 20);
 
-            // Sebar 8 titik peti hanyut / kayu apung di sekitar pesisir / spawn
-            for (int i = 0; i < 8; i++) {
-                double x = spawnLoc.getX() + (random.nextDouble() - 0.5) * 80;
-                double z = spawnLoc.getZ() + (random.nextDouble() - 0.5) * 80;
+            // Jumlah peti dinamis berdasarkan pemain online (antara 6 s.d. 14)
+            int crateCount = Math.min(14, Math.max(6, online * 2 + 6));
+
+            for (int i = 0; i < crateCount; i++) {
+                double x = spawnLoc.getX() + (random.nextDouble() - 0.5) * 100;
+                double z = spawnLoc.getZ() + (random.nextDouble() - 0.5) * 100;
                 int y = world.getHighestBlockYAt((int) x, (int) z);
                 Location loc = new Location(world, x, y + 1, z);
                 activeHotspots.add(loc);
@@ -200,15 +234,24 @@ public class SeasonalEventDirector {
                 policy.registerEventEntity(itemEntity, currentEventId);
                 spawnedEventItems.add(itemEntity);
             }
+
+            // P1 Fix: Target objective persis sama dengan jumlah peti yang berhasil di-spawn!
+            this.objectiveTarget = spawnedEventItems.size();
+
         } else if (type == SeasonalEventType.ABU_DAN_BARA) {
-            // Sebar 10 titik bara semu & sampel abu di sekitar bukit / daratan
-            for (int i = 0; i < 10; i++) {
-                double x = spawnLoc.getX() + (random.nextDouble() - 0.5) * 60;
-                double z = spawnLoc.getZ() + (random.nextDouble() - 0.5) * 60;
+            // Jumlah hotspot dinamis (antara 6 s.d. 12)
+            int hotspotCount = Math.min(12, Math.max(6, online * 2 + 6));
+
+            for (int i = 0; i < hotspotCount; i++) {
+                double x = spawnLoc.getX() + (random.nextDouble() - 0.5) * 80;
+                double z = spawnLoc.getZ() + (random.nextDouble() - 0.5) * 80;
                 int y = world.getHighestBlockYAt((int) x, (int) z);
                 Location loc = new Location(world, x, y + 1, z);
                 activeHotspots.add(loc);
             }
+
+            // P1 Fix: Target objective persis sama dengan jumlah hotspot aktif!
+            this.objectiveTarget = activeHotspots.size();
         }
     }
 
@@ -223,7 +266,7 @@ public class SeasonalEventDirector {
             updateBossBar();
         }, 20L, 20L);
 
-        // Atmospheric Task: Partikel dan suara atmosferik
+        // Atmospheric Task: Partikel dan suara atmosferik terukur
         atmosphericTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             World world = Bukkit.getWorld("kala_main");
             if (world == null && !Bukkit.getWorlds().isEmpty()) {
@@ -234,23 +277,22 @@ public class SeasonalEventDirector {
             if (activeEvent == SeasonalEventType.BADAI_SELAT) {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     if (player.getWorld().equals(world)) {
-                        // Kabut badai & desau angin
-                        player.spawnParticle(Particle.CLOUD, player.getLocation().add(0, 2, 0), 20, 10, 2, 10, 0.05);
-                        if (random.nextInt(6) == 0) {
-                            player.playSound(player.getLocation(), Sound.WEATHER_RAIN_ABOVE, 0.7f, 0.6f);
+                        // Partikel hemat
+                        player.spawnParticle(Particle.CLOUD, player.getLocation().add(0, 2, 0), 10, 8, 2, 8, 0.03);
+                        if (random.nextInt(8) == 0) {
+                            player.playSound(player.getLocation(), Sound.WEATHER_RAIN_ABOVE, 0.6f, 0.6f);
                         }
                     }
                 }
             } else if (activeEvent == SeasonalEventType.ABU_DAN_BARA) {
-                // Efek titik bara semu pada hotspots
                 for (Location loc : activeHotspots) {
-                    loc.getWorld().spawnParticle(Particle.FLAME, loc, 5, 0.4, 0.4, 0.4, 0.02);
-                    loc.getWorld().spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, loc, 3, 0.2, 0.6, 0.2, 0.01);
+                    loc.getWorld().spawnParticle(Particle.FLAME, loc, 3, 0.3, 0.3, 0.3, 0.02);
+                    loc.getWorld().spawnParticle(Particle.CAMPFIRE_COSY_SMOKE, loc, 2, 0.2, 0.4, 0.2, 0.01);
                 }
 
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     if (player.getWorld().equals(world)) {
-                        player.spawnParticle(Particle.ASH, player.getLocation().add(0, 3, 0), 25, 8, 3, 8, 0.0);
+                        player.spawnParticle(Particle.ASH, player.getLocation().add(0, 3, 0), 12, 6, 2, 6, 0.0);
                     }
                 }
             }
@@ -262,40 +304,41 @@ public class SeasonalEventDirector {
     // ─────────────────────────────────────────────
 
     /**
-     * Dipanggil saat pemain mengambil peti hanyut atau memadamkan bara
+     * Dipanggil saat pemain berinteraksi dengan titik bara semu (radius ketat <= 2.5 blok)
      */
     public boolean handlePlayerInteraction(Player player, Location targetLoc) {
-        if (activeEvent == SeasonalEventType.NONE || targetLoc == null) return false;
+        if (activeEvent != SeasonalEventType.ABU_DAN_BARA || targetLoc == null) return false;
 
-        if (activeEvent == SeasonalEventType.ABU_DAN_BARA) {
-            // Cek apakah lokasi dekat dengan salah satu hotspot bara semu
-            for (Iterator<Location> it = activeHotspots.iterator(); it.hasNext(); ) {
-                Location hotspot = it.next();
-                if (hotspot.getWorld().equals(targetLoc.getWorld()) && hotspot.distanceSquared(targetLoc) <= 9.0) {
-                    it.remove();
-                    objectiveCurrent++;
+        for (Iterator<Location> it = activeHotspots.iterator(); it.hasNext(); ) {
+            Location hotspot = it.next();
+            if (hotspot.getWorld().equals(targetLoc.getWorld()) && hotspot.distanceSquared(targetLoc) <= 6.25) { // Radius 2.5 blok
+                it.remove();
+                objectiveCurrent++;
 
-                    // Visual & Audio pemadaman bara
-                    targetLoc.getWorld().spawnParticle(Particle.SMOKE, targetLoc, 20, 0.5, 0.5, 0.5, 0.05);
-                    targetLoc.getWorld().playSound(targetLoc, Sound.BLOCK_FIRE_EXTINGUISH, 1.0f, 1.2f);
+                // Visual & Audio pemadaman bara
+                targetLoc.getWorld().spawnParticle(Particle.SMOKE, targetLoc, 15, 0.4, 0.4, 0.4, 0.04);
+                targetLoc.getWorld().playSound(targetLoc, Sound.BLOCK_FIRE_EXTINGUISH, 0.9f, 1.2f);
 
-                    // Catat ke ledger
-                    ledger.recordContribution(currentEventId, player, "PADAMKAN_BARA", 15);
-                    player.sendMessage(Component.text("§8[§6🔥 Abu & Bara§8] §aBara semu berhasil dipadamkan! (+15 Poin Kontribusi)", NamedTextColor.GREEN));
+                // Catat ke ledger
+                ledger.recordContribution(currentEventId, player, "PADAMKAN_BARA", 15);
+                player.sendMessage(Component.text("§8[§6🔥 Abu & Bara§8] §aBara semu berhasil dipadamkan! (+15 Poin Kontribusi)", NamedTextColor.GREEN));
 
-                    // Reward sampel abu
-                    ItemStack ashSample = new ItemStack(Material.GUNPOWDER);
-                    ItemMeta meta = ashSample.getItemMeta();
-                    if (meta != null) {
-                        meta.displayName(Component.text("🌋 Sampel Abu Vulkanik", NamedTextColor.GOLD));
-                        meta.lore(List.of(Component.text("§7Material penelitian yang berguna untuk kesuburan.", NamedTextColor.GRAY)));
-                        ashSample.setItemMeta(meta);
-                    }
-                    player.getInventory().addItem(ashSample);
-
-                    updateBossBar();
-                    return true;
+                // P1 Fix: Sampel abu vulkanik diberi metadata PDC khusus
+                ItemStack ashSample = new ItemStack(Material.GUNPOWDER);
+                ItemMeta meta = ashSample.getItemMeta();
+                if (meta != null) {
+                    meta.displayName(Component.text("🌋 Sampel Abu Vulkanik", NamedTextColor.GOLD).decorate(TextDecoration.BOLD));
+                    meta.lore(List.of(
+                            Component.text("§7Material penelitian asli dari endapan kawah Murka.", NamedTextColor.GRAY),
+                            Component.text("§8KalaCore Tag: volcano_ash_sample", NamedTextColor.DARK_GRAY)
+                    ));
+                    meta.getPersistentDataContainer().set(CUSTOM_ITEM_KEY, PersistentDataType.STRING, "volcano_ash_sample");
+                    ashSample.setItemMeta(meta);
                 }
+                player.getInventory().addItem(ashSample);
+
+                updateBossBar();
+                return true;
             }
         }
         return false;
@@ -317,14 +360,14 @@ public class SeasonalEventDirector {
         player.sendMessage(Component.text("§8[§b🌊 Badai Selat§8] §aPeti hanyut berhasil diselamatkan! (+20 Poin Kontribusi)", NamedTextColor.GREEN));
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.2f);
 
-        // Hadiah rempah/logistik langsung
+        // Hadiah logistik terukur
         player.getInventory().addItem(new ItemStack(Material.OAK_LOG, 4));
-        player.getInventory().addItem(new ItemStack(Material.SWEET_BERRIES, 8));
+        player.getInventory().addItem(new ItemStack(Material.SWEET_BERRIES, 6));
 
         updateBossBar();
     }
 
-    private void cleanupSpawnedHotspots() {
+    private void cleanupSpawnedHotspots(String eventId) {
         for (Item item : spawnedEventItems) {
             if (item != null && item.isValid()) {
                 item.remove();
@@ -332,6 +375,11 @@ public class SeasonalEventDirector {
         }
         spawnedEventItems.clear();
         activeHotspots.clear();
+
+        // P1 Fix: Cleanup terisolasi hanya untuk eventId musiman ini
+        if (eventId != null) {
+            policy.cleanupEvent(eventId);
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -341,7 +389,7 @@ public class SeasonalEventDirector {
     private void updateBossBar() {
         if (activeEvent == SeasonalEventType.NONE) return;
 
-        float progress = Math.min(1.0f, (float) objectiveCurrent / Math.max(1, objectiveTarget));
+        float progress = objectiveTarget > 0 ? Math.min(1.0f, (float) objectiveCurrent / (float) objectiveTarget) : 0f;
         int minutes = eventRemainingSeconds / 60;
         int seconds = eventRemainingSeconds % 60;
         String timeStr = String.format("%02d:%02d", minutes, seconds);
@@ -408,7 +456,6 @@ public class SeasonalEventDirector {
             Bukkit.broadcast(Component.text("═══════════════════════════════════════", NamedTextColor.GREEN));
             Bukkit.broadcast(Component.empty());
 
-            // Reward sound
             for (Player player : Bukkit.getOnlinePlayers()) {
                 player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.0f);
             }

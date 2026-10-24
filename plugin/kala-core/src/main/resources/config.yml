@@ -89,3 +89,24 @@ kompas:
     - KAMPUNG
     - PROGRES
     - PANDUAN
+
+# ─────────── Gunung Murka Volcano Arena & Timeline (V7) ───────────
+volcano:
+  world: kala_main
+  center:
+    x: 0.0
+    y: 110.0
+    z: -350.0
+  arena-radius: 65.0
+  spawn-safe-zone-radius: 120.0  # Radius aman dari spawn (0,0) bebas hazard
+  timeline:
+    puncak-duration-sec: 600    # 10 menit bersatu (Unified Timeline V7)
+    subphases:
+      pembuka-kawah: 45
+      gelombang-abu: 120
+      rockfall-salvo: 240
+      retakan-panas: 360
+      encounter-bara: 480
+      objective-final: 600
+  interval-hours: 24            # Siklus erupsi berkala
+

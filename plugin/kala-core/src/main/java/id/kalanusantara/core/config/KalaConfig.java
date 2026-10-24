@@ -31,6 +31,13 @@ public class KalaConfig {
     private int worldBorderRadius;
     private String serverTheme;
 
+    // === Volcano Arena & Timeline (V7) ===
+    private String volcanoWorld;
+    private double volcanoCenterX, volcanoCenterY, volcanoCenterZ;
+    private double volcanoArenaRadius;
+    private double spawnSafeZoneRadius;
+    private int puncakDurationSec;
+
     public KalaConfig(KalaCorePlugin plugin) {
         this.plugin = plugin;
         this.log = plugin.getLogger();
@@ -55,6 +62,15 @@ public class KalaConfig {
         this.worldBorderRadius = config.getInt("world.border-radius", 3000);
         this.serverTheme      = config.getString("server.theme", "nusantara");
 
+        // Volcano Arena & Timeline (V7)
+        this.volcanoWorld     = config.getString("volcano.world", "kala_main");
+        this.volcanoCenterX   = config.getDouble("volcano.center.x", 0.0);
+        this.volcanoCenterY   = config.getDouble("volcano.center.y", 110.0);
+        this.volcanoCenterZ   = config.getDouble("volcano.center.z", -350.0);
+        this.volcanoArenaRadius = config.getDouble("volcano.arena-radius", 65.0);
+        this.spawnSafeZoneRadius = config.getDouble("volcano.spawn-safe-zone-radius", 120.0);
+        this.puncakDurationSec = config.getInt("volcano.timeline.puncak-duration-sec", 600);
+
         log.info("Konfigurasi dimuat: locale=" + defaultLocale + " debug=" + debugMode);
     }
 
@@ -76,6 +92,21 @@ public class KalaConfig {
     public boolean isTutorialEnabled()  { return tutorialEnabled; }
     public int getWorldBorderRadius()   { return worldBorderRadius; }
     public String getServerTheme()      { return serverTheme; }
+
+    public String getVolcanoWorld()     { return volcanoWorld; }
+    public double getVolcanoCenterX()   { return volcanoCenterX; }
+    public double getVolcanoCenterY()   { return volcanoCenterY; }
+    public double getVolcanoCenterZ()   { return volcanoCenterZ; }
+    public double getVolcanoArenaRadius() { return volcanoArenaRadius; }
+    public double getSpawnSafeZoneRadius() { return spawnSafeZoneRadius; }
+    public int getPuncakDurationSec()   { return puncakDurationSec; }
+
+    public org.bukkit.Location getVolcanoCenter(org.bukkit.World fallbackWorld) {
+        org.bukkit.World w = org.bukkit.Bukkit.getWorld(volcanoWorld);
+        if (w == null) w = fallbackWorld;
+        if (w == null) return null;
+        return new org.bukkit.Location(w, volcanoCenterX, volcanoCenterY, volcanoCenterZ);
+    }
 
     public FileConfiguration getRaw()   { return config; }
 }

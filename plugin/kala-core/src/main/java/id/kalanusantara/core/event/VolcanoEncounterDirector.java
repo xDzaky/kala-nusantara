@@ -1,7 +1,6 @@
 package id.kalanusantara.core.event;
 
 import id.kalanusantara.core.KalaCorePlugin;
-import id.kalanusantara.core.kala.KalaEventManager;
 import id.kalanusantara.core.notify.KalaNotificationService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -11,37 +10,43 @@ import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.MagmaCube;
-import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.logging.Logger;
 
 /**
- * VolcanoEncounterDirector — Mengurutkan subfase encounter berirama selama fase PUNCAK (Kala Nusantara v6.0).
+ * VolcanoEncounterDirector — Mengurutkan subfase encounter berirama selama fase PUNCAK (Kala Nusantara v7.0).
  *
- * Mengatur:
- * 1. Pembuka Kawah (0–45s)
- * 2. Gelombang Abu & Observasi (45–120s)
- * 3. Salvo Rockfall Tertelegrafis (120–240s)
- * 4. Retakan Panas & Jalur Kawah (240–360s)
- * 5. Encounter Bara Opsional (360–480s)
- * 6. Objective Final & Resolusi Altar (480–600s)
+ * Audit V7:
+ * 1. P1 Fix: Menggunakan arena Gunung Murka dari konfigurasi (getVolcanoCenter), BUKAN world spawn.
+ * 2. P1 Fix: Pemisahan alur penyelesaian normal (completeEncounter) dan pembatalan (abortEncounter).
+ * 3. Unified Timeline 10 Menit (600 detik) yang selaras dengan PUNCAK_DURATION_SEC di KalaEventManager.
+ * 4. P1 Fix: Cleanup terisolasi dengan cleanupEvent(currentEventId).
  */
 public class VolcanoEncounterDirector {
 
     public enum EncounterSubphase {
-        PEMBUKA_KAWAH("Pembuka Kawah"),
-        GELOMBANG_ABU("Gelombang Abu & Pengamatan"),
-        ROCKFALL_SALVO("Hujan Bongkahan Batu"),
-        RETAKAN_PANAS("Retakan Panas Kawah"),
-        ENCOUNTER_BARA("Ancaman Penjaga Bara"),
-        OBJECTIVE_FINAL("Resolusi Altar Gotong Royong");
+        PEMBUKA_KAWAH("Pembuka Kawah", 0, 45),
+        GELOMBANG_ABU("Gelombang Abu & Pengamatan", 45, 120),
+        ROCKFALL_SALVO("Hujan Bongkahan Batu", 120, 240),
+        RETAKAN_PANAS("Retakan Panas Kawah", 240, 360),
+        ENCOUNTER_BARA("Ancaman Penjaga Bara", 360, 480),
+        OBJECTIVE_FINAL("Resolusi Altar Gotong Royong", 480, 600);
 
         private final String displayName;
-        EncounterSubphase(String displayName) { this.displayName = displayName; }
+        private final int startSec;
+        private final int endSec;
+
+        EncounterSubphase(String displayName, int startSec, int endSec) {
+            this.displayName = displayName;
+            this.startSec = startSec;
+            this.endSec = endSec;
+        }
+
         public String getDisplayName() { return displayName; }
+        public int getStartSec() { return startSec; }
+        public int getEndSec() { return endSec; }
     }
 
     private final KalaCorePlugin plugin;
@@ -70,7 +75,7 @@ public class VolcanoEncounterDirector {
     public void startEncounter(String eventId) {
         this.currentEventId = eventId;
         this.encounterSeconds = 0;
-        cancelEncounter();
+        cancelEncounterTask();
 
         log.info("[VolcanoDirector] Memulai encounter terstruktur PUNCAK untuk event: " + eventId);
         setSubphase(EncounterSubphase.PEMBUKA_KAWAH);
@@ -90,6 +95,9 @@ public class VolcanoEncounterDirector {
                 setSubphase(EncounterSubphase.ENCOUNTER_BARA);
             } else if (encounterSeconds == 480) {
                 setSubphase(EncounterSubphase.OBJECTIVE_FINAL);
+            } else if (encounterSeconds >= 600) {
+                completeEncounter();
+                return;
             }
 
             // Loop aksi per subfase
@@ -99,11 +107,13 @@ public class VolcanoEncounterDirector {
 
     private void setSubphase(EncounterSubphase subphase) {
         this.currentSubphase = subphase;
-        log.info("[VolcanoDirector] Subfase encounter: " + subphase.getDisplayName());
+        log.info("[VolcanoDirector] Subfase encounter: " + subphase.getDisplayName() + " [" + encounterSeconds + "s]");
 
-        World world = Bukkit.getWorld("kala_main");
-        if (world == null) return;
-        Location spawnLoc = world.getSpawnLocation();
+        Location arenaCenter = getArenaLocation();
+        if (arenaCenter == null) {
+            log.warning("[VolcanoDirector] Gagal menemukan koordinat arena Gunung Murka!");
+            return;
+        }
 
         switch (subphase) {
             case PEMBUKA_KAWAH -> {
@@ -131,15 +141,14 @@ public class VolcanoEncounterDirector {
                 plugin.getNotificationService().broadcastActionBar(
                         Component.text("§c[!] Retakan panas muncul di sekitar lereng kawah!", NamedTextColor.RED)
                 );
-                // Munculkan 2-3 heat vents di sekitar spawn arena
+                // Munculkan 2-3 heat vents di sekitar arena gunung
                 for (int i = 0; i < 3; i++) {
-                    Location ventLoc = spawnLoc.clone().add((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20);
+                    Location ventLoc = arenaCenter.clone().add((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
                     hazardDirector.spawnHeatVent(ventLoc, currentEventId, 45);
                 }
             }
             case ENCOUNTER_BARA -> {
-                // Munculkan Percik Bara (Magma Cube kecil aman) jika pemain siap
-                spawnBaraMinions(spawnLoc);
+                spawnBaraMinions(arenaCenter);
             }
             case OBJECTIVE_FINAL -> {
                 plugin.getNotificationService().broadcastTitle(
@@ -154,19 +163,31 @@ public class VolcanoEncounterDirector {
 
     private void tickCurrentSubphase() {
         if (currentSubphase == null) return;
-        World world = Bukkit.getWorld("kala_main");
-        if (world == null) return;
+        Location arenaCenter = getArenaLocation();
+        if (arenaCenter == null) return;
 
-        // Subfase 3: Salvo berkala setiap 25 detik
+        // Subfase 3: Salvo berkala setiap 25 detik di arena gunung
         if (currentSubphase == EncounterSubphase.ROCKFALL_SALVO) {
             if (encounterSeconds % 25 == 0) {
-                hazardDirector.launchRockfallSalvo(world.getSpawnLocation(), currentEventId, 4);
+                hazardDirector.launchRockfallSalvo(arenaCenter, currentEventId, 4);
             }
         }
     }
 
     /**
-     * Spawn minion bara terkontrol (maksimal 4 entitas vanilla, zero block fire)
+     * Mendapatkan lokasi pusat arena Gunung Murka dari konfigurasi (Bukan Spawn)
+     */
+    private Location getArenaLocation() {
+        World world = Bukkit.getWorld(plugin.getKalaConfig().getVolcanoWorld());
+        if (world == null && !Bukkit.getWorlds().isEmpty()) {
+            world = Bukkit.getWorlds().get(0);
+        }
+        if (world == null) return null;
+        return plugin.getKalaConfig().getVolcanoCenter(world);
+    }
+
+    /**
+     * Spawn minion bara terkontrol di sekitar arena gunung (maks 3 entitas)
      */
     private void spawnBaraMinions(Location center) {
         if (center == null || center.getWorld() == null) return;
@@ -174,41 +195,68 @@ public class VolcanoEncounterDirector {
 
         World world = center.getWorld();
         for (int i = 0; i < 3; i++) {
-            Location loc = center.clone().add((Math.random() - 0.5) * 16, 1, (Math.random() - 0.5) * 16);
+            Location loc = center.clone().add((Math.random() - 0.5) * 20, 1, (Math.random() - 0.5) * 20);
             MagmaCube cube = (MagmaCube) world.spawnEntity(loc, EntityType.MAGMA_CUBE);
-            cube.setSize(1); // Ukuran kecil yang aman
+            cube.setSize(1); // Ukuran kecil aman
             cube.customName(Component.text("§cPercik Bara Kawah", NamedTextColor.RED));
             cube.setCustomNameVisible(true);
             policy.registerEventEntity(cube, currentEventId);
         }
 
         plugin.getNotificationService().broadcastActionBar(
-                Component.text("§c[Encounter] Makhluk bara kawah muncul di sekitar arena!", NamedTextColor.RED)
+                Component.text("§c[Encounter] Makhluk bara kawah muncul di sekitar arena gunung!", NamedTextColor.RED)
         );
     }
 
     /**
-     * Menghentikan encounter dan membersihkan seluruh entitas serta hazard
+     * P1 Fix: Penyelesaian Normal Encounter.
+     * Mengumumkan reward klaim manual via /kala claim-event dan membersihkan entitas.
      */
-    public void stopEncounter() {
-        cancelEncounter();
-        if (currentEventId != null) {
-            // Berikan imbalan partisipasi kepada semua pemain di kala_main
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                if (p.getWorld().getName().equals("kala_main")) {
-                    ledger.claimReward(currentEventId, p, 50.0, 30);
-                }
-            }
+    public void completeEncounter() {
+        cancelEncounterTask();
+        String finishedEventId = currentEventId;
 
-            policy.cleanupAllEventEntities(currentEventId);
+        if (finishedEventId != null) {
+            log.info("[VolcanoDirector] Encounter PUNCAK selesai normal untuk event: " + finishedEventId);
+            Bukkit.broadcast(Component.empty());
+            Bukkit.broadcast(Component.text("§6§l✦ PUNCAK ERUPSI MEREDA ✦", NamedTextColor.GOLD));
+            Bukkit.broadcast(Component.text("§7Semua pengembara yang telah bergotong royong dapat mengklaim imbalan:", NamedTextColor.GRAY));
+            Bukkit.broadcast(Component.text("§eGunakan perintah: §a/kala claim-event " + finishedEventId, NamedTextColor.YELLOW));
+            Bukkit.broadcast(Component.empty());
+
+            policy.cleanupEvent(finishedEventId);
             hazardDirector.cancelAllHazards();
         }
+
         currentSubphase = null;
         currentEventId = null;
         encounterSeconds = 0;
     }
 
-    private void cancelEncounter() {
+    /**
+     * P1 Fix: Pembatalan Encounter (Admin stop atau Server Shutdown).
+     * Tidak melakukan auto-payout; hanya membersihkan entitas dan task secara idempotent.
+     */
+    public void abortEncounter(String reason) {
+        cancelEncounterTask();
+        String abortedId = currentEventId;
+
+        if (abortedId != null) {
+            log.info("[VolcanoDirector] Encounter dibatalkan (" + reason + ") untuk event: " + abortedId);
+            policy.cleanupEvent(abortedId);
+            hazardDirector.cancelAllHazards();
+        }
+
+        currentSubphase = null;
+        currentEventId = null;
+        encounterSeconds = 0;
+    }
+
+    public void stopEncounter() {
+        abortEncounter("Manual/Shutdown");
+    }
+
+    private void cancelEncounterTask() {
         if (sequenceTask != null && !sequenceTask.isCancelled()) {
             sequenceTask.cancel();
             sequenceTask = null;
@@ -240,7 +288,7 @@ public class VolcanoEncounterDirector {
         if (next != null) {
             setSubphase(next);
         } else {
-            stopEncounter();
+            completeEncounter();
         }
     }
 }

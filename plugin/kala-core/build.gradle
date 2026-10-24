@@ -30,6 +30,14 @@ dependencies {
 
     // SQLite JDBC (bundled in JAR)
     implementation 'org.xerial:sqlite-jdbc:3.43.0.0'
+
+    // Testing (V7)
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 tasks.withType(JavaCompile) {

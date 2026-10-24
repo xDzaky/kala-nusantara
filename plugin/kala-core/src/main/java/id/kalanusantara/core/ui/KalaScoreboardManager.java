@@ -9,68 +9,62 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.*;
 
-import java.util.HashMap;
+import java.text.DecimalFormat;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * ScoreboardManager — Sidebar scoreboard kustom Kala Nusantara
+ * KalaScoreboardManager — Sidebar Scoreboard Persisten Nusantara (Kala Nusantara v7.0).
  *
- * Layout sidebar:
- * ─────────────────
- *  ✦ KALA NUSANTARA ✦
- * ─────────────────
- *  Profesi: Pengembara
- *  Kampung: -
- *
- *  ⚔ Misi Aktif
- *  Tutorial: Labuhan...
- *
- *  💰 Saldo
- *  Rp 500
- *
- *  🌐 Online: 1
- * ─────────────────
+ * Audit V7 P2 Fix:
+ * 1. Tidak lagi unregister/register Objective setiap 2 detik (menghilangkan packet storm & screen flicker).
+ * 2. Reusable Objective & Teams dengan caching baris sebelumnya.
+ * 3. Batas ketat 7 baris esensial (tanpa spacer ganda atau baris redundant).
+ * 4. Komponen Adventure modern yang ramah crossplay Java & Bedrock MCPE.
  */
 public class KalaScoreboardManager {
 
     private final KalaCorePlugin plugin;
-    private final Map<UUID, Scoreboard> playerBoards = new HashMap<>();
+    private final Map<UUID, Scoreboard> playerBoards = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<Integer, Component>> lastRenderedLines = new ConcurrentHashMap<>();
+    private static final DecimalFormat NUM_FMT = new DecimalFormat("#,###");
 
     public KalaScoreboardManager(KalaCorePlugin plugin) {
         this.plugin = plugin;
     }
 
-    /** Buat atau perbarui scoreboard untuk seorang pemain */
+    /**
+     * Buat atau perbarui scoreboard untuk seorang pemain
+     */
     public void update(Player player) {
-        PlayerProfile profile = plugin.getIdentityManager()
-                .get(player.getUniqueId()).orElse(null);
+        if (player == null || !player.isOnline()) return;
 
         ScoreboardManager mgr = Bukkit.getScoreboardManager();
-        Scoreboard board = playerBoards.computeIfAbsent(
-                player.getUniqueId(), k -> mgr.getNewScoreboard());
+        Scoreboard board = playerBoards.computeIfAbsent(player.getUniqueId(), k -> mgr.getNewScoreboard());
 
-        // Hapus objective lama lalu buat ulang agar baris bisa diupdate
-        Objective old = board.getObjective("kala_sidebar");
-        if (old != null) old.unregister();
+        // P2 Fix: Reusable Objective — jangan unregister setiap update!
+        Objective obj = board.getObjective("kala_sidebar");
+        if (obj == null) {
+            obj = board.registerNewObjective(
+                    "kala_sidebar",
+                    Criteria.DUMMY,
+                    Component.text("✦ KALA NUSANTARA ✦", NamedTextColor.GOLD).decorate(TextDecoration.BOLD)
+            );
+            obj.setDisplaySlot(DisplaySlot.SIDEBAR);
+        }
 
-        Objective obj = board.registerNewObjective(
-                "kala_sidebar",
-                Criteria.DUMMY,
-                Component.text("✦ KALA NUSANTARA ✦", NamedTextColor.GOLD)
-                        .decorate(TextDecoration.BOLD));
-        obj.setDisplaySlot(DisplaySlot.SIDEBAR);
+        PlayerProfile profile = plugin.getIdentityManager().get(player.getUniqueId()).orElse(null);
 
         // ── Data pemain & lingkungan ──────────────────────────
-        String profesi   = profile != null ? profile.getProfesi() : "Pengembara";
-        double saldo     = profile != null ? profile.getBalance() : 0;
-        boolean tutorial = profile != null && profile.isTutorialDone();
-        int online       = Bukkit.getOnlinePlayers().size();
+        String profesi = profile != null ? profile.getProfesi() : "Pengembara";
+        double saldo   = profile != null ? profile.getBalance() : 0;
+        int online     = Bukkit.getOnlinePlayers().size();
 
-        String musim = plugin.getSeasonManager() != null 
-                ? plugin.getSeasonManager().getSeasonName() 
-                : "Musim I: Samudra";
-        
+        String musim = plugin.getSeasonManager() != null
+                ? plugin.getSeasonManager().getSeasonName()
+                : "Musim I";
+
         String worldName = player.getWorld().getName();
         String lokasi = switch (worldName) {
             case "kala_main" -> "Labuhan Awal";
@@ -78,8 +72,8 @@ public class KalaScoreboardManager {
             default -> worldName;
         };
 
-        String gunungStatus = plugin.getKalaEventManager() != null 
-                ? plugin.getKalaEventManager().getCurrentPhase().getDisplayName() 
+        String gunungStatus = plugin.getKalaEventManager() != null
+                ? plugin.getKalaEventManager().getCurrentPhase().getDisplayName()
                 : "§7Tenang";
 
         // Proyek aktif
@@ -94,67 +88,74 @@ public class KalaScoreboardManager {
             }
         }
 
-        // ── Baris (skor = urutan tampil, makin besar = makin atas) ───
-        int line = 16;
+        // ── 7 Baris Esensial (Audit V7 Standar) ────────────────────────
+        Map<Integer, Component> userCache = lastRenderedLines.computeIfAbsent(player.getUniqueId(), k -> new ConcurrentHashMap<>());
 
-        setLine(board, obj, line--, "§r");                                       // spasi atas
-        setLine(board, obj, line--, "§6📅 Musim: §f" + musim);
-        setLine(board, obj, line--, "§a📍 Lokasi: §f" + lokasi);
-        setLine(board, obj, line--, "§e⚔ Misi: §f" + (tutorial ? "§aBantu Desa ✓" : "§7Tutorial Awal"));
-        setLine(board, obj, line--, "§b🏛 Proyek: §f" + proyekStr);
-        setLine(board, obj, line--, "§6💰 Dompet: §aRp " + formatNumber(saldo));
-        setLine(board, obj, line--, "§c🌋 Gunung: " + gunungStatus);
-        setLine(board, obj, line--, "§7👥 Online: §f" + online + " §7pengembara");
-        setLine(board, obj, line--, "§r§4");                                     // spasi
-        setLine(board, obj, line,   "§e/kompas — Menu Utama");
+        updateLineIfChanged(board, obj, userCache, 7, Component.text("📅 Musim: ", NamedTextColor.GOLD).append(Component.text(musim, NamedTextColor.WHITE)));
+        updateLineIfChanged(board, obj, userCache, 6, Component.text("📍 Lokasi: ", NamedTextColor.GREEN).append(Component.text(lokasi, NamedTextColor.WHITE)));
+        updateLineIfChanged(board, obj, userCache, 5, Component.text("⚔ Profesi: ", NamedTextColor.YELLOW).append(Component.text(profesi, NamedTextColor.WHITE)));
+        updateLineIfChanged(board, obj, userCache, 4, Component.text("🏛 Proyek: ", NamedTextColor.AQUA).append(Component.text(proyekStr, NamedTextColor.WHITE)));
+        updateLineIfChanged(board, obj, userCache, 3, Component.text("💰 Dompet: ", NamedTextColor.GOLD).append(Component.text("Rp " + formatNumber(saldo), NamedTextColor.GREEN)));
+        updateLineIfChanged(board, obj, userCache, 2, Component.text("🌋 Gunung: ", NamedTextColor.RED).append(Component.text(gunungStatus)));
+        updateLineIfChanged(board, obj, userCache, 1, Component.text("👥 Online: ", NamedTextColor.GRAY).append(Component.text(online + " warga", NamedTextColor.WHITE)));
 
-        player.setScoreboard(board);
+        if (player.getScoreboard() != board) {
+            player.setScoreboard(board);
+        }
     }
 
-    /** Hapus scoreboard — kembali ke default server */
+    /**
+     * P2 Fix: Hanya update prefix Team jika komponen berubah
+     */
+    private void updateLineIfChanged(Scoreboard board, Objective obj, Map<Integer, Component> cache, int score, Component component) {
+        Component previous = cache.get(score);
+        if (previous != null && previous.equals(component)) {
+            return; // Konten sama persis — hindari kirim paket
+        }
+        cache.put(score, component);
+
+        String teamName = "kl_" + score;
+        Team team = board.getTeam(teamName);
+        if (team == null) {
+            team = board.registerNewTeam(teamName);
+        }
+
+        String entry = getEntry(score);
+        if (!team.hasEntry(entry)) {
+            team.addEntry(entry);
+        }
+
+        team.prefix(component);
+        obj.getScore(entry).setScore(score);
+    }
+
     public void remove(Player player) {
+        if (player == null) return;
         playerBoards.remove(player.getUniqueId());
+        lastRenderedLines.remove(player.getUniqueId());
         player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
     }
 
-    /** Perbarui semua pemain online (dipanggil setiap N detik) */
     public void updateAll() {
         for (Player p : Bukkit.getOnlinePlayers()) {
             update(p);
         }
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
-
-    private void setLine(Scoreboard board, Objective obj, int score, String text) {
-        // Setiap entri harus unik — kita pakai text langsung sebagai team
-        String teamName = "kl_" + score;
-        Team team = board.getTeam(teamName);
-        if (team == null) team = board.registerNewTeam(teamName);
-
-        // Entry unik per baris (invisible color code trick)
-        String entry = getEntry(score);
-        team.addEntry(entry);
-
-        // Prefix = konten baris (max 64 char setelah MC 1.13 tidak ada batasan via Adventure)
-        team.prefix(Component.text(text));
-
-        // Beri skor
-        Score s = obj.getScore(entry);
-        s.setScore(score);
-    }
-
-    /** Entry unik per skor menggunakan kode warna tersembunyi */
     private String getEntry(int score) {
-        // Pakai kombinasi §0–§f untuk membuat string unik per baris
-        String[] codes = {"§0","§1","§2","§3","§4","§5","§6","§7",
-                          "§8","§9","§a","§b","§c","§d","§e","§f","§k"};
-        return codes[score % codes.length] + "§r";
+        return switch (score) {
+            case 7 -> "§1§r";
+            case 6 -> "§2§r";
+            case 5 -> "§3§r";
+            case 4 -> "§4§r";
+            case 3 -> "§5§r";
+            case 2 -> "§6§r";
+            case 1 -> "§7§r";
+            default -> "§8§r";
+        };
     }
 
-    private String formatNumber(double val) {
-        if (val >= 1_000_000) return String.format("%.1fJt", val / 1_000_000);
-        if (val >= 1_000)     return String.format("%.1fRb", val / 1_000);
-        return String.format("%.0f", val);
+    private String formatNumber(double value) {
+        return NUM_FMT.format(value);
     }
 }

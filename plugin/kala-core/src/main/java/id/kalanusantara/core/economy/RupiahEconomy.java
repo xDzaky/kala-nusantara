@@ -44,12 +44,18 @@ public class RupiahEconomy {
     }
 
     /**
-     * Tambah saldo
+     * Tambah saldo (Mendukung pemain online maupun offline - Audit V7)
      */
-    public boolean deposit(UUID uuid, double amount, String description) {
-        if (amount <= 0) return false;
+    public synchronized boolean deposit(UUID uuid, double amount, String description) {
+        if (amount <= 0 || Double.isNaN(amount) || Double.isInfinite(amount)) return false;
 
-        plugin.getIdentityManager().get(uuid).ifPresent(p -> p.addBalance(amount));
+        var profileOpt = plugin.getIdentityManager().get(uuid);
+        if (profileOpt.isPresent()) {
+            profileOpt.get().addBalance(amount);
+        } else {
+            // Pemain offline: update langsung ke SQLite
+            updateOfflineBalance(uuid, amount);
+        }
         logTransaction(uuid, "DEPOSIT", amount, description);
         return true;
     }
@@ -57,31 +63,54 @@ public class RupiahEconomy {
     /**
      * Kurangi saldo
      */
-    public boolean withdraw(UUID uuid, double amount, String description) {
-        if (amount <= 0) return false;
+    public synchronized boolean withdraw(UUID uuid, double amount, String description) {
+        if (amount <= 0 || Double.isNaN(amount) || Double.isInfinite(amount)) return false;
 
         var profileOpt = plugin.getIdentityManager().get(uuid);
-        if (profileOpt.isEmpty()) return false;
+        if (profileOpt.isPresent()) {
+            PlayerProfile profile = profileOpt.get();
+            if (!profile.hasBalance(amount)) return false;
+            profile.deductBalance(amount);
+        } else {
+            // Cek saldo offline
+            double cur = queryBalanceFromDb(uuid);
+            if (cur < amount) return false;
+            updateOfflineBalance(uuid, -amount);
+        }
 
-        PlayerProfile profile = profileOpt.get();
-        if (!profile.hasBalance(amount)) return false;
-
-        profile.deductBalance(amount);
         logTransaction(uuid, "WITHDRAW", amount, description);
         return true;
     }
 
     /**
-     * Transfer antar pemain
+     * Transfer antar pemain secara atomik (Audit V7 P1 Fix)
      */
-    public TransferResult transfer(UUID from, UUID to, double amount) {
-        if (amount <= 0) return TransferResult.INVALID_AMOUNT;
+    public synchronized TransferResult transfer(UUID from, UUID to, double amount) {
+        if (amount <= 0 || Double.isNaN(amount) || Double.isInfinite(amount)) return TransferResult.INVALID_AMOUNT;
+        if (from.equals(to)) return TransferResult.INVALID_AMOUNT;
         if (!hasBalance(from, amount)) return TransferResult.INSUFFICIENT_FUNDS;
 
-        withdraw(from, amount, "Transfer ke " + getPlayerName(to));
-        deposit(to, amount, "Transfer dari " + getPlayerName(from));
+        boolean withdrawn = withdraw(from, amount, "Transfer ke " + getPlayerName(to));
+        if (!withdrawn) return TransferResult.INSUFFICIENT_FUNDS;
 
+        deposit(to, amount, "Transfer dari " + getPlayerName(from));
         return TransferResult.SUCCESS;
+    }
+
+    private void updateOfflineBalance(UUID uuid, double delta) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            synchronized (plugin.getStorageManager().getDbLock()) {
+                String sql = "UPDATE player_profile SET balance = MAX(0.0, balance + ?) WHERE uuid = ?";
+                try (Connection conn = plugin.getStorageManager().ensureConnection();
+                     PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setDouble(1, delta);
+                    ps.setString(2, uuid.toString());
+                    ps.executeUpdate();
+                } catch (SQLException e) {
+                    log.severe("[Economy] Gagal update saldo offline: " + e.getMessage());
+                }
+            }
+        });
     }
 
     public boolean hasBalance(UUID uuid, double amount) {

@@ -28,9 +28,14 @@ server/versions/
 server/cache/
 server/.paper/
 server/logs/
+*.log
+*.log.*
 server/crash-reports/
 server/plugins_archived/
 server/plugins/LuckPerms/libs/
+**/WorldEdit/.archive-unpack/
+**/TerraformGenerator/logs/
+**/Geyser-Spigot/cache/
 
 # World region files, chunk data, playerdata (runtime state)
 server/kala_main/

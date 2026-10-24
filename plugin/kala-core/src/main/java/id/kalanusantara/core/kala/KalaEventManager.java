@@ -69,10 +69,10 @@ public class KalaEventManager {
     private long lastEruptionTime = System.currentTimeMillis();
     private long autoTriggerIntervalMs = 24L * 3600L * 1000L; // Default: 24 jam
 
-    // Durasi tiap fase dalam detik
+    // Durasi tiap fase dalam detik (V7: Unified 10-Minute PUNCAK Timeline)
     private static final int TANDA_DURATION_SEC     = 120; // 2 menit
     private static final int PERSIAPAN_DURATION_SEC = 180; // 3 menit
-    private static final int PUNCAK_DURATION_SEC    = 300; // 5 menit
+    private static final int PUNCAK_DURATION_SEC    = 600; // 10 menit bersatu dengan VolcanoEncounterDirector
     private static final int PEMULIHAN_DURATION_SEC = 180; // 3 menit
 
     // Kyori Adventure BossBar persisten tunggal (UI Ownership Matrix)
@@ -81,6 +81,8 @@ public class KalaEventManager {
     public KalaEventManager(KalaCorePlugin plugin) {
         this.plugin = plugin;
         this.log    = plugin.getLogger();
+        // Muat timer persisten
+        this.lastEruptionTime = plugin.getKalaConfig().getRaw().getLong("volcano.last_eruption_time", System.currentTimeMillis());
         initBossBar();
         startAutoScheduler();
     }
@@ -131,7 +133,7 @@ public class KalaEventManager {
     public boolean stopEvent() {
         if (currentPhase == KalaPhase.IDLE) return false;
         if (plugin.getVolcanoEncounterDirector() != null) {
-            plugin.getVolcanoEncounterDirector().stopEncounter();
+            plugin.getVolcanoEncounterDirector().abortEncounter("Admin/System stop");
         }
         cancelTasks();
         transitionTo(KalaPhase.IDLE);
@@ -174,13 +176,15 @@ public class KalaEventManager {
 
     private void onIdle(KalaPhase prev) {
         if (plugin.getVolcanoEncounterDirector() != null) {
-            plugin.getVolcanoEncounterDirector().stopEncounter();
+            plugin.getVolcanoEncounterDirector().abortEncounter("Fase Idle");
         }
         hideBossBarFromAll();
         currentOfferings = 0;
         phaseRemainingSeconds = 0;
         phaseTotalSeconds = 0;
         lastEruptionTime = System.currentTimeMillis();
+        plugin.getKalaConfig().getRaw().set("volcano.last_eruption_time", lastEruptionTime);
+        plugin.saveConfig();
 
         if (prev != KalaPhase.IDLE) {
             plugin.getNotificationService().broadcastActionBar(
@@ -279,7 +283,7 @@ public class KalaEventManager {
 
     private void onPemulihan() {
         if (plugin.getVolcanoEncounterDirector() != null) {
-            plugin.getVolcanoEncounterDirector().stopEncounter();
+            plugin.getVolcanoEncounterDirector().completeEncounter();
         }
 
         phaseTotalSeconds = PEMULIHAN_DURATION_SEC;

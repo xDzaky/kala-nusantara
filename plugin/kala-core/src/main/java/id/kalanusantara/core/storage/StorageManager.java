@@ -178,6 +178,18 @@ public class StorageManager {
                 timestamp INTEGER NOT NULL,
                 UNIQUE(event_id, uuid, objective_id)
             )
+            """,
+            // Event Single-Claim Ledger (Audit V7 P1 Fix)
+            """
+            CREATE TABLE IF NOT EXISTS event_claims (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL,
+                uuid TEXT NOT NULL,
+                amount REAL NOT NULL,
+                exp INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                UNIQUE(event_id, uuid)
+            )
             """
         };
 
@@ -193,7 +205,13 @@ public class StorageManager {
                 // Kolom sudah ada — normal
             }
         }
-        log.info("Schema database OK (5 tabel)");
+        log.info("Schema database OK (" + tables.length + " tabel)");
+    }
+
+    private final Object dbLock = new Object();
+
+    public Object getDbLock() {
+        return dbLock;
     }
 
     public Connection getConnection() {
@@ -203,7 +221,7 @@ public class StorageManager {
     /**
      * Pastikan koneksi masih aktif (reconnect jika timeout)
      */
-    public Connection ensureConnection() {
+    public synchronized Connection ensureConnection() {
         try {
             if (connection == null || connection.isClosed()) {
                 log.warning("Koneksi database terputus, reconnecting...");
@@ -215,7 +233,22 @@ public class StorageManager {
         return connection;
     }
 
+    /**
+     * Melakukan checkpoint WAL agar seluruh transaksi di buffer masuk ke disk secara konsisten (V7)
+     */
+    public void checkpointWal() {
+        synchronized (dbLock) {
+            try (Statement st = ensureConnection().createStatement()) {
+                st.execute("PRAGMA wal_checkpoint(TRUNCATE);");
+                log.info("[StorageManager] WAL Checkpoint TRUNCATE selesai.");
+            } catch (SQLException e) {
+                log.warning("[StorageManager] Gagal melakukan WAL checkpoint: " + e.getMessage());
+            }
+        }
+    }
+
     public void shutdown() {
+        checkpointWal();
         try {
             if (connection != null && !connection.isClosed()) {
                 connection.close();

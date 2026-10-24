@@ -42,6 +42,9 @@ public class BackupManager {
     public void createBackup(CommandSender sender) {
         sender.sendMessage(Component.text("Memulai proses backup snapshot Kala Nusantara...", NamedTextColor.YELLOW));
 
+        // Flush WAL checkpoint sebelum penyalinan file database
+        plugin.getStorageManager().checkpointWal();
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
@@ -67,11 +70,16 @@ public class BackupManager {
                     }
                 }
 
-                log.info("[BackupManager] Snapshot berhasil dibuat: " + zipFile.getName() + " (" + (zipFile.length() / 1024) + " KB)");
-                sender.sendMessage(Component.text("✔ Backup snapshot berhasil disimpan: " + zipFile.getName(), NamedTextColor.GREEN));
+                long sizeKb = zipFile.length() / 1024;
+                log.info("[BackupManager] Snapshot berhasil dibuat: " + zipFile.getName() + " (" + sizeKb + " KB)");
+                Bukkit.getScheduler().runTask(plugin, () ->
+                    sender.sendMessage(Component.text("✔ Backup snapshot berhasil disimpan: " + zipFile.getName() + " (" + sizeKb + " KB)", NamedTextColor.GREEN))
+                );
             } catch (Exception e) {
                 log.severe("[BackupManager] Gagal membuat backup: " + e.getMessage());
-                sender.sendMessage(Component.text("✘ Gagal membuat backup: " + e.getMessage(), NamedTextColor.RED));
+                Bukkit.getScheduler().runTask(plugin, () ->
+                    sender.sendMessage(Component.text("✘ Gagal membuat backup: " + e.getMessage(), NamedTextColor.RED))
+                );
             }
         });
     }
