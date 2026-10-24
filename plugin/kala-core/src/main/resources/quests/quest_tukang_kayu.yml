@@ -1,0 +1,32 @@
+# quest: quest_tukang_kayu.yml
+# Quest profesi Tukang Kayu — setelah tutorial
+
+id: quest_tukang_kayu
+title: "Menjadi Tukang Kayu"
+description: |
+  Pak Guru membutuhkan bangku dari kayu Jati untuk sekolah desa.
+  Kumpulkan kayu dan buat bangku untuknya!
+type: PROFESSION
+next-quest: null
+
+reward:
+  rupiah: 250
+  items:
+    - IRON_AXE:1
+
+steps:
+  1:
+    description: "Tebang 10 batang kayu Oak"
+    action: COLLECT
+    target: OAK_LOG
+    count: 10
+  2:
+    description: "Buat 2 meja kerja (Crafting Table)"
+    action: CRAFT
+    target: CRAFTING_TABLE
+    count: 2
+  3:
+    description: "Serahkan 20 Papan Kayu ke Pak Guru"
+    action: TALK
+    target: pak_guru
+    count: 1

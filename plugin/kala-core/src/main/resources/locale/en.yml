@@ -1,0 +1,81 @@
+# locale/en.yml — English
+# Kala Nusantara RPG
+
+# === General ===
+prefix: "&6[Kala Nusantara] &r"
+yes: "Yes"
+no: "No"
+error.no-permission: "&cYou don't have permission to do that."
+error.player-only: "&cThis command can only be used by players."
+error.unknown-command: "&cUnknown command. Type &e/kala help &cfor help."
+
+# === Welcome ===
+welcome.first-join: |
+  &6✦ Welcome to &lKala Nusantara&6! ✦
+  &7You are a new Explorer in these islands.
+  &7Find &e&lMbah Kala &7near spawn to start your journey!
+  &eType /compass &7to open the guide menu.
+welcome.returning: "&6Welcome back, &e{0}&6! Nusantara awaits you."
+welcome.tutorial-hint: "&7💡 &eType /kompas &7to open the Explorer's Compass."
+
+# === Kompas Pengembara (Main Menu) ===
+kompas.title: "&6✦ Explorer's Compass ✦"
+kompas.tab.misi: "&eActive Quests"
+kompas.tab.peta: "&bNusantara Map"
+kompas.tab.kampung: "&aVillage"
+kompas.tab.progres: "&dProgress"
+kompas.tab.panduan: "&7Guide"
+kompas.no-active-quest: "&7No active quests. Find &eMbah Kala &7to start!"
+kompas.bedrock-hint: "&7(Tap the Compass item to open the menu)"
+
+# === Explorer's Journal ===
+jurnal.title: "&8📖 Explorer's Journal &r&e{0}"
+jurnal.no-entries: "&7Your journal is empty. Start exploring!"
+jurnal.entry.new: "&a📝 New journal entry added: &e{0}"
+jurnal.discovery.new: "&6🔍 New discovery: &e{0}!"
+
+# === Quest / Mission ===
+quest.new: "&a✅ New quest: &e{0}"
+quest.complete: "&6🏆 Quest complete: &e{0}! &7(+{1} Rp)"
+quest.progress: "&7Quest &e{0}&7 progress: &b{1}/{2}"
+quest.failed: "&cQuest &e{0} &cfailed."
+
+# === Tutorial ===
+tutorial.start: |
+  &6═══════════════════════════
+  &6  Welcome, Explorer!
+  &6═══════════════════════════
+  &7You have arrived at &eLabuhan Awal&7, the gateway
+  &7to the Nusantara Archipelago. Follow &eMbah Kala's
+  &7guidance to begin your journey.
+tutorial.step.1: "&7📌 &eStep 1: &7Talk to &eMbah Kala &7near you."
+tutorial.step.2: "&7📌 &eStep 2: &7Gather wood from nearby trees."
+tutorial.step.3: "&7📌 &eStep 3: &7Craft your first tool."
+tutorial.step.4: "&7📌 &eStep 4: &7Claim your first land with &e/claim"
+tutorial.step.5: "&7📌 &eStep 5: &7Complete your first order."
+tutorial.complete: |
+  &6🎉 Tutorial Complete!
+  &7You are now an official Explorer of Nusantara.
+  &7Keep exploring new islands and build your village!
+
+# === Economy ===
+economy.balance: "&7Balance: &e{0} {1}"
+economy.received: "&a+{0} {1} received from {2}"
+economy.paid: "&c-{0} {1} paid to {2}"
+economy.insufficient: "&cInsufficient balance! You need &e{0} {1} &cmore."
+economy.starting-bonus: "&6🎁 Starting bonus: &e{0} Rupiah Kala &7added to your wallet!"
+
+# === Identity / Profile ===
+identity.profile.header: "&6── Explorer Profile ──"
+identity.profile.name: "&7Name: &e{0}"
+identity.profile.profesi: "&7Profession: &b{0}"
+identity.profile.kampung: "&7Village: &a{0}"
+identity.profile.join-date: "&7Joined: &7{0}"
+identity.profile.playtime: "&7Playtime: &7{0} hours"
+
+# === Admin Messages ===
+admin.reload: "&aKalaCore successfully reloaded!"
+admin.setspawn: "&aWorld spawn set to your position."
+admin.setworldborder: "&aWorld border set to radius &e{0} blocks&a."
+admin.debug-on: "&eDebug mode: &aON"
+admin.debug-off: "&eDebug mode: &cOFF"

@@ -1,0 +1,8 @@
+New worlds spawn structures: true
+Valid worlds v2:
+  kala_main: true
+  kala_main_nether: false
+  kala_main_the_end: false
+  kala_resource: true
+  kala_resource_test: true
+  kala_terraform_test: true

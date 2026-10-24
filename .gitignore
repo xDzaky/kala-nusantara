@@ -1,0 +1,69 @@
+# ==========================================
+# Kala Nusantara Minecraft Server .gitignore
+# ==========================================
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml
+
+# All compiled binaries / Java Archives (keeps repo lean & below GitHub 50MB limits)
+*.jar
+*.war
+*.ear
+
+# Gradle build files & caches
+.gradle/
+**/build/
+!plugin/kala-core/src/**
+
+# Server runtime, libraries, logs, versions & caches
+server/libraries/
+server/versions/
+server/cache/
+server/.paper/
+server/logs/
+server/crash-reports/
+server/plugins_archived/
+server/plugins/LuckPerms/libs/
+
+# World region files, chunk data, playerdata (runtime state)
+server/kala_main/
+server/kala_resource/
+server/kala_terraform_test/
+server/world/
+server/world_nether/
+server/world_the_end/
+*.mca
+*.dat
+*.dat_old
+session.lock
+uid.dat
+
+# SQLite & H2 Databases & runtime state
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.mv.db
+server/plugins/CoreProtect/
+server/plugins/KalaCore/data/*.db*
+server/plugins/faststats/
+server/plugins/bStats/
+server/plugins/spark/
+
+# Security, keys, and private tokens
+**/key.pem
+**/identity.pem
+**/saved-refresh-tokens.json
+
+# Backups
+backups/
+server/backups/
+*.zip
+*.tar.gz

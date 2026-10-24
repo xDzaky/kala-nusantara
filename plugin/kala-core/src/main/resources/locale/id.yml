@@ -1,0 +1,81 @@
+# locale/id.yml — Bahasa Indonesia
+# Kala Nusantara RPG
+
+# === Umum ===
+prefix: "&6[Kala Nusantara] &r"
+yes: "Ya"
+no: "Tidak"
+error.no-permission: "&cKamu tidak memiliki izin untuk itu."
+error.player-only: "&cPerintah ini hanya bisa digunakan oleh pemain."
+error.unknown-command: "&cPerintah tidak dikenal. Ketik &e/kala help &cuntuk bantuan."
+
+# === Sambutan ===
+welcome.first-join: |
+  &6✦ Selamat Datang di &lKala Nusantara&6! ✦
+  &7Kamu adalah Pengembara baru di kepulauan ini.
+  &7Temui &e&lMbah Kala &7di dekat spawn untuk memulai perjalananmu!
+  &eKetik /kompas &7untuk membuka menu panduan.
+welcome.returning: "&6Selamat kembali, &e{0}&6! Nusantara menantimu."
+welcome.tutorial-hint: "&7💡 &eKetik /kompas &7untuk membuka Kompas Pengembara."
+
+# === Kompas Pengembara (Menu Utama) ===
+kompas.title: "&6✦ Kompas Pengembara ✦"
+kompas.tab.misi: "&eMisi Aktif"
+kompas.tab.peta: "&bPeta Nusantara"
+kompas.tab.kampung: "&aKampung"
+kompas.tab.progres: "&dProgres"
+kompas.tab.panduan: "&7Panduan"
+kompas.no-active-quest: "&7Tidak ada misi aktif. Temui &eMbah Kala &7untuk memulai!"
+kompas.bedrock-hint: "&7(Tekan item Kompas untuk membuka menu)"
+
+# === Jurnal Penjelajah ===
+jurnal.title: "&8📖 Jurnal Penjelajah &r&e{0}"
+jurnal.no-entries: "&7Jurnalmu masih kosong. Mulai berpetualang!"
+jurnal.entry.new: "&a📝 Entri jurnal baru ditambahkan: &e{0}"
+jurnal.discovery.new: "&6🔍 Penemuan baru: &e{0}!"
+
+# === Quest / Misi ===
+quest.new: "&a✅ Misi baru: &e{0}"
+quest.complete: "&6🏆 Misi selesai: &e{0}! &7(+{1} Rp)"
+quest.progress: "&7Progres misi &e{0}&7: &b{1}/{2}"
+quest.failed: "&cMisi &e{0} &cgagal."
+
+# === Tutorial ===
+tutorial.start: |
+  &6═══════════════════════════
+  &6  Selamat Datang, Pengembara!
+  &6═══════════════════════════
+  &7Kamu tiba di &eLabuhan Awal&7, pintu gerbang
+  &7Kepulauan Nusantara. Ikuti panduan &eMbah Kala
+  &7untuk memulai perjalananmu.
+tutorial.step.1: "&7📌 &eLangkah 1: &7Bicara dengan &eMbah Kala &7di sekitarmu."
+tutorial.step.2: "&7📌 &eLangkah 2: &7Kumpulkan kayu dari pohon terdekat."
+tutorial.step.3: "&7📌 &eLangkah 3: &7Buat alat pertamamu."
+tutorial.step.4: "&7📌 &eLangkah 4: &7Klaim lahan pertamamu dengan &e/claim"
+tutorial.step.5: "&7📌 &eLangkah 5: &7Selesaikan pesanan pertamamu."
+tutorial.complete: |
+  &6🎉 Tutorial Selesai!
+  &7Kamu kini resmi menjadi Pengembara Nusantara.
+  &7Terus jelajahi pulau-pulau baru dan bangun kampungmu!
+
+# === Ekonomi ===
+economy.balance: "&7Saldo: &e{0} {1}"
+economy.received: "&a+{0} {1} diterima dari {2}"
+economy.paid: "&c-{0} {1} dibayarkan ke {2}"
+economy.insufficient: "&cSaldo tidak cukup! Kamu butuh &e{0} {1}&c lebih."
+economy.starting-bonus: "&6🎁 Bonus awal: &e{0} Rupiah Kala &7telah ditambahkan ke sakumu!"
+
+# === Identitas / Profil ===
+identity.profile.header: "&6── Profil Pengembara ──"
+identity.profile.name: "&7Nama: &e{0}"
+identity.profile.profesi: "&7Profesi: &b{0}"
+identity.profile.kampung: "&7Kampung: &a{0}"
+identity.profile.join-date: "&7Bergabung: &7{0}"
+identity.profile.playtime: "&7Waktu main: &7{0} jam"
+
+# === Pesan Admin ===
+admin.reload: "&aKalaCore berhasil di-reload!"
+admin.setspawn: "&aSpawn dunia diatur ke posisimu."
+admin.setworldborder: "&aBatas dunia diatur ke radius &e{0} blok&a."
+admin.debug-on: "&eMode debug: &aAKTIF"
+admin.debug-off: "&eMode debug: &cNONAKTIF"

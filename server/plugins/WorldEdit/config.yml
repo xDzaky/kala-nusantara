@@ -1,0 +1,37 @@
+# WorldEdit Config — Kala Nusantara
+# Dioptimalkan untuk server RPG
+
+limits:
+  max-blocks: 500000       # Max blok per operasi (5x default untuk admin)
+  max-super-pickaxe-size: 20
+  max-brush-radius: 20
+  max-radius: 100
+  max-checks: 300000
+  max-iterations: 20000
+  max-entity-changesets-per-operation: 625
+
+# Snapshots
+snapshots:
+  # Directory untuk backup dunia
+  directory: "../backups/snapshots"
+
+# History
+history:
+  size: 30
+  expiration: 600          # 10 menit
+
+# Clipboard
+clipboard:
+  use-disk: true           # Hemat RAM, simpan clipboard ke disk
+
+# Permissions — semua via LuckPerms
+# worldedit.* untuk admin
+# worldedit.navigation.* untuk semua pemain
+
+# Performance
+extent:
+  disable-extent-caching: false
+  allowed-data-cycle-depth: 5
+
+max-memory-percent: 75
+allow-use-in-creative: true

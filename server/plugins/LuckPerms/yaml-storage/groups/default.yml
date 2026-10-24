@@ -1,0 +1,14 @@
+name: default
+permissions:
+  - kala.player=true
+  - kala.npc.interact=true
+  - kala.quest.complete=true
+  - minecraft.command.me=true
+  - essentials.help=true
+  - griefprevention.createclaims=true
+  - griefprevention.abandonclaims=true
+  - griefprevention.accessclaims=true
+  - griefprevention.list=true
+metadata:
+  prefix: '&7'
+  weight: 1

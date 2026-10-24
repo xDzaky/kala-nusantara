@@ -1,0 +1,22 @@
+# ThunderEconomy Config — Kala Nusantara
+# Vault-compatible economy using Rupiah Kala as currency
+
+currency:
+  name: "Rupiah Kala"
+  name-plural: "Rupiah Kala"
+  symbol: "Rp"
+  decimal-places: 0
+
+# Starting balance (diatur juga di KalaCore)
+starting-balance: 500.0
+
+# Max balance per pemain
+max-balance: 1000000.0
+
+# Storage
+storage:
+  type: yaml    # yaml / sqlite / mysql
+  file: economy.yml
+
+# Format uang
+format: "{symbol} {amount}"

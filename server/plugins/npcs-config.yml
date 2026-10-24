@@ -1,0 +1,23 @@
+# NPCs Plugin Config — Kala Nusantara
+# Plugin: AugmentedThunder/NPCs 0.2.4
+# Docs: https://hangar.papermc.io/AugmentedThunder/NPCs
+
+# NPC Storage — simpan di file YAML
+storage:
+  type: yaml
+  path: npcs.yml
+
+# Default NPC behavior
+defaults:
+  look-at-player: true
+  collidable: false
+  invulnerable: true
+  equipment:
+    helmet: AIR
+    chestplate: AIR
+    leggings: AIR
+    boots: AIR
+
+# NPC Interactions — akan dikonfigurasi via in-game commands
+# Gunakan: /npc create <nama>
+# Untuk Mbah Kala: /npc create "Mbah Kala"

@@ -1,0 +1,45 @@
+# quest: tutorial_labuhan.yml
+# Tutorial utama Kala Nusantara — Labuhan Awal
+# Step 1 (TALK) langsung di-progress saat berinteraksi dengan Mbah Kala NPC
+
+id: tutorial_labuhan
+title: "Selamat Datang di Labuhan Awal"
+description: |
+  Kamu baru tiba di Labuhan Awal, pelabuhan gerbang Kepulauan Nusantara.
+  Mbah Kala, tetua desa, ingin berbicara denganmu.
+type: TUTORIAL
+next-quest: quest_tukang_kayu
+
+reward:
+  rupiah: 100
+  items:
+    - WOODEN_AXE:1
+    - BREAD:5
+    - MAP:1
+
+steps:
+  1:
+    description: "Bicara dengan Mbah Kala di dekat spawn"
+    action: TALK
+    target: mbah_kala
+    count: 1
+  2:
+    description: "Tebang 5 batang kayu"
+    action: COLLECT
+    target: OAK_LOG
+    count: 5
+  3:
+    description: "Buat 4 Papan Kayu (OAK_PLANKS)"
+    action: CRAFT
+    target: OAK_PLANKS
+    count: 4
+  4:
+    description: "Serahkan pesanan pertama ke Pedagang (/pesanan)"
+    action: MANUAL
+    target: first_order
+    count: 1
+  5:
+    description: "Laporkan kembali ke Mbah Kala"
+    action: TALK
+    target: mbah_kala
+    count: 1

@@ -1,0 +1,171 @@
+# Master switch for the plugin.
+enabled: true
+
+npcs:
+  # Minecraft profile names are limited; display names can be longer in future versions, but the backing
+  # fake player must use a safe profile name.
+  max-profile-name-length: 16
+  default-name: "NPC_{random}"
+  # Prevent normal combat damage to fake-player NPCs. Creative/admin commands can still force deaths,
+  # so auto-respawn below keeps NPCs from getting stuck as dead bodies.
+  invulnerable: true
+  auto-respawn: true
+  respawn-delay-ticks: 40
+  collidable: false
+  cleanup-linked-on-disable: true
+  cleanup-standalone-on-disable: true
+  # Linked NPCs are created by other plugins such as Bodyguard and are not persisted.
+  allow-linked-api: true
+  fake-player:
+    # Keep off by default so fake-player NPCs do not inflate world/player counts or trigger player-scoped work.
+    count-as-world-player: false
+    show-in-tab-list: false
+    broadcast-join-leave: false
+
+tick:
+  # Legacy behaviour interval. Movement uses the lower value between this and behavior.movement-interval-ticks.
+  interval-ticks: 20
+  save-interval-ticks: 1200
+
+storage:
+  # yaml preserves the existing npcs.yml behavior. Use sqlite, mysql, or mariadb for database storage.
+  type: yaml
+  sqlite-file: npcs.db
+  table-prefix: npcs_
+  mysql:
+    jdbc-url: "jdbc:mysql://localhost:3306/minecraft_plugins?sslMode=VERIFY_IDENTITY&allowPublicKeyRetrieval=false"
+    username: ""
+    password: ""
+  mariadb:
+    jdbc-url: "jdbc:mariadb://localhost:3306/minecraft_plugins?sslMode=verify-full"
+    username: ""
+    password: ""
+
+behavior:
+  # Fake-player NPCs move in small grounded steps and route through nearby safe standing columns.
+  movement-interval-ticks: 2
+  movement-step-blocks: 0.45
+  pathfinding-radius: 24.0
+  pathfinding-max-nodes: 512
+  stuck-retarget-ticks: 60
+  target-reach-distance: 1.25
+  guard-detection-radius: 16.0
+  guard-attack-range: 2.8
+  guard-attack-damage: 4.0
+  guard-attack-cooldown-ticks: 20
+  bodyguard-follow-distance: 3.0
+  # Bodyguards use this minimum owner-follow step so they can keep up with sprinting players.
+  bodyguard-follow-step-blocks: 0.65
+  bodyguard-teleport-distance: 32.0
+  max-managed-npcs-per-tick: 16
+  water-navigation:
+    # Short streams, flowing farm channels, and flooded caves are handled as swim steps.
+    enabled: true
+    swim-step-blocks: 0.45
+    # Lets NPCs follow underwater targets vertically instead of staying at the water surface.
+    aquatic-follow-enabled: true
+    vertical-swim-step-blocks: 0.35
+    max-depth-search-blocks: 16
+    # Longer water runs are left to the boat crossing assistant below.
+    prefer-boat-after-blocks: 8
+    max-exit-search-blocks: 4
+  traversal-assist:
+    enabled: true
+    linked-enabled: true
+    standalone-enabled: true
+    bridge-material: COBBLESTONE
+    bridge-width-blocks: 2
+    lifetime-seconds: 120
+    max-blocks-per-route: 64
+    max-placements-per-tick: 2
+    fall-solid-first: true
+    water-fallback-enabled: true
+    # When a grounded route is blocked by a long/deep water crossing, NPCs can spawn a temporary boat,
+    # ride across the water, then disembark on the next safe shore.
+    boat-crossing-enabled: true
+    boat-min-water-blocks: 6
+    boat-min-water-depth-blocks: 2
+    boat-max-scan-blocks: 64
+    boat-speed-blocks: 0.95
+    # Bow-equipped linked NPCs can hold a high perch while they have a clear shot, then descend once the target moves too far.
+    bow-perch-enabled: true
+    bow-perch-min-height-blocks: 3.0
+    bow-perch-max-distance-blocks: 24.0
+    blocked-worlds:
+      - stormcourts_court
+      - stormcourts_jail
+      - crimereconstruction
+      - crime_reconstruction
+      - justaprankbro_scenes
+
+traders:
+  max-offers: 18
+
+messages:
+  prefix: "&8[&bNPCs&8]&r "
+  no-permission: "&cYou do not have permission."
+  player-only: "&cOnly players can use this command."
+  disabled: "&cNPCs is currently disabled."
+  nms-unavailable: "&cNMS fake-player support is unavailable on this server version. Check console for details."
+  spawned: "&aSpawned NPC {name}&a."
+  removed: "&7Removed {count} NPC(s)."
+  teleported: "&aTeleported {name}."
+  list-empty: "&7No active NPCs."
+  list-header: "&eActive NPCs:"
+  list-line: "&7- &f{name} &8(&7{id}&8) &8- &b{role}"
+  info-header: "&eNPC info for &f{name}&e:"
+  info-line: "&7ID: &f{id}&7, Role: &f{role}&7, Patrol: &f{patrol}&7, Offers: &f{offers}&7, Owner: &f{owner}&7, Equipment: &f{equipment}&7, Stats: &f{stats}"
+  ambiguous: "&cThat selector matches multiple NPCs: {matches}"
+  selected: "&aSelected NPC {name} &8(&7{id}&8)&a."
+  selected-none: "&cNo NPC selected. Use /npcs select <id|name>."
+  reload: "&aNPCs config reloaded."
+  unknown: "&cUnknown NPC."
+  invalid-role: "&cUnknown role. Use neutral, trader, guard, or bodyguard."
+  role-set: "&aSet {name} to {role}."
+  owner-set: "&aSet {name}'s owner to {owner}."
+  owner-cleared: "&7Cleared {name}'s owner."
+  setting-set: "&aUpdated {name}: &f{setting}&a = &f{value}&a."
+  equip-enabled: "&aEquip mode enabled for {name}. Right-click the NPC with an item to equip it."
+  equip-disabled: "&7Equip mode disabled."
+  equipped: "&aEquipped {name}'s {slot} with &f{item}&a."
+  equipment-cleared: "&7Cleared {name}'s equipment: &f{slot}&7."
+  equip-no-item: "&cHold an item to equip this NPC."
+  patrol-added: "&aAdded waypoint {count} to {name}."
+  patrol-cleared: "&7Cleared {name}'s patrol waypoints."
+  patrol-radius: "&aSet {name} to patrol a {radius} block radius around you."
+  patrol-stopped: "&7Stopped {name}'s patrol."
+  trader-added: "&aAdded trade to {name}: &f{offer}&a."
+  trader-cleared: "&7Cleared all trades for {name}."
+  trader-removed: "&7Removed trade {index} from {name}."
+  trader-empty: "&7This trader has no offers configured."
+  trader-opened: "&7Opening trader {name}."
+  invalid-offer: "&cInvalid trade. Check material names and stack amounts."
+  help:
+    - "&e/npcs spawn [name]&7 - Spawn a fake-player NPC."
+    - "&e/npcs spawnat <world> <x> <y> <z> [name]&7 - Spawn from console or command blocks."
+    - "&e/npcs clone [id|name] [name]&7 - Clone an NPC at your position."
+    - "&e/npcs list&7 - List active NPCs."
+    - "&e/npcs near [radius] [page]&7 - List NPCs near you."
+    - "&e/npcs select <id|name>&7 - Select an NPC by short ID, full UUID, or name."
+    - "&e/npcs info [id|name]&7 - Show role, owner, patrol, trader, and equipment info."
+    - "&e/npcs gui [id|name]&7 - Open the clickable NPC management inventory."
+    - "&e/npcs set [id|name] <role|owner|patrol-radius|stat> <value>&7 - Change common NPC settings."
+    - "&e/npcs stats [id|name] <move-speed|attack-damage|attack-speed|attack-cooldown-ticks|all> <value|+delta|reset>&7 - Edit per-NPC stats."
+    - "&e/npcs role [id|name] <neutral|trader|guard|bodyguard>&7 - Set NPC role."
+    - "&e/npcs owner [id|name] <player|none>&7 - Set bodyguard owner."
+    - "&e/npcs equip [id|name]&7 - Toggle right-click equipment mode for the selected NPC."
+    - "&e/npcs equip clear [id|name] [slot|all]&7 - Clear equipped items."
+    - "&e/npcs patrol add [id|name]&7 - Add your location as a waypoint."
+    - "&e/npcs patrol radius [id|name] <radius>&7 - Make the NPC wander around your location."
+    - "&e/npcs patrol stop|clear|list [id|name]&7 - Manage patrols."
+    - "&e/npcs trader add [id|name] <item> <amount> <price-item> <price-amount>&7 - Add a villager-style trade."
+    - "&e/npcs trader remove|clear|list [id|name] [index]&7 - Manage trader offers."
+    - "&e/npcs remove <id|name|all>&7 - Remove NPCs."
+    - "&e/npcs move <id|name> <world> <x> <y> <z> [yaw] [pitch]&7 - Move an NPC exactly."
+    - "&e/npcs tp [id|name]&7 - Teleport an NPC to you."
+    - "&e/npcs status&7 - Show runtime and storage status."
+    - "&e/npcs audit&7 - Show role counts and data health."
+    - "&e/npcs tempblocks cleanup [namespace] [key]&7 - Clean protected NPC temporary blocks."
+    - "&e/npcs save&7 - Save standalone NPC data immediately."
+    - "&e/npcs backup&7 - Export standalone NPC data to backups."
+    - "&e/npcs reload&7 - Reload config."

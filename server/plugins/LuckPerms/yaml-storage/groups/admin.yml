@@ -1,0 +1,17 @@
+name: admin
+permissions:
+  - kala.admin=true
+  - kala.player=true
+  - worldedit.*=true
+  - griefprevention.*=true
+  - chunky.*=true
+  - npcs.*=true
+  - placeholderapi.*=true
+  - luckperms.*=true
+  - bukkit.command.*=true
+  - '*'=true
+parents:
+  - default
+metadata:
+  prefix: '&c[Admin] &r'
+  weight: 100

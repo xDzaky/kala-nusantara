@@ -1,0 +1,118 @@
+name: KalaCore
+version: '0.1.0'
+main: id.kalanusantara.core.KalaCorePlugin
+api-version: '1.21'
+description: Core plugin for Kala Nusantara RPG server
+authors:
+  - KalaNusantaraTeam
+website: https://kalanusantara.id
+
+softdepend:
+  - PlaceholderAPI
+  - Vault
+  - LuckPerms
+  - Geyser-Spigot
+
+commands:
+  kala:
+    description: Perintah utama Kala Nusantara
+    aliases: [kn, kalanusantara]
+    usage: /kala <subcommand>
+    permission: kala.player
+  kompas:
+    description: Buka Kompas Pengembara (menu utama)
+    aliases: [menu, guide]
+    usage: /kompas
+    permission: kala.player
+  jurnal:
+    description: Buka Jurnal Penjelajah
+    aliases: [journal, log]
+    usage: /jurnal
+    permission: kala.player
+  kalaadmin:
+    description: Perintah admin KalaCore
+    aliases: [ka]
+    usage: /kalaadmin <subcommand>
+    permission: kala.admin
+  pesanan:
+    description: Lihat dan serahkan pesanan kampung
+    aliases: [order, pesan]
+    usage: /pesanan [lihat|serahkan <nomor>]
+    permission: kala.player
+  speed:
+    description: Atur kecepatan gerak atau terbang pemain
+    aliases: [kecepatan]
+    usage: /speed <1-5/custom>
+    permission: kala.speed
+  profesi:
+    description: Lihat atau pilih profesi karaktermu
+    aliases: [profession, job]
+    usage: /profesi [pilih|lihat]
+    permission: kala.player
+  tambang:
+    description: Masuk atau keluar dari Dunia Tambang Nusantara
+    aliases: [resource, mining]
+    usage: /tambang [pergi|pulang|info]
+    permission: kala.player
+  proyek:
+    description: Lihat dan sumbang proyek gotong royong kampung
+    aliases: [project, gotongroyong]
+    usage: /proyek [lihat|setor <id> [jumlah]]
+    permission: kala.player
+  musim:
+    description: Buka Kalender 8 Minggu Musim Nusantara
+    aliases: [season, kalender]
+    usage: /musim
+    permission: kala.player
+  kosmetik:
+    description: Buka menu Gelar Kehormatan & Efek Langkah Kaki
+    aliases: [gelar, titles]
+    usage: /kosmetik
+    permission: kala.player
+  ekspedisi:
+    description: Buka informasi Ekspedisi Musiman Nusantara
+    aliases: [expedition, jelajah]
+    usage: /ekspedisi
+    permission: kala.player
+  dompet:
+    description: Cek saldo dompet Rupiah Kala
+    aliases: [uang, balance, bal, rupiah]
+    usage: /dompet [pemain]
+    permission: kala.player
+  transfer:
+    description: Transfer Rupiah Kala antar pemain
+    aliases: [pay, kirimuang]
+    usage: /transfer <pemain> <jumlah>
+    permission: kala.player
+  fauna:
+    description: Buka Atlas Fauna Nusantara
+    aliases: [atlas, satwa]
+    usage: /fauna
+    permission: kala.player
+  gunung:
+    description: Cek aktivitas Gunung Murka & sajen pereda erupsi
+    aliases: [volcano, murka]
+    usage: /gunung
+    permission: kala.player
+  panduan:
+    description: Buka panduan kontrol sentuh Bedrock & bantuan HP
+    aliases: [bedrock, help, bantuan]
+    usage: /panduan
+    permission: kala.player
+
+permissions:
+  kala.player:
+    description: Akses fitur dasar Kala Nusantara
+    default: true
+  kala.admin:
+    description: Akses perintah admin
+    default: op
+  kala.speed:
+    description: Akses perintah mengatur kecepatan gerak
+    default: op
+  kala.npc.interact:
+    description: Berinteraksi dengan NPC
+    default: true
+  kala.quest.complete:
+    description: Menyelesaikan quest
+    default: true

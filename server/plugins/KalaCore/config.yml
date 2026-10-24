@@ -1,0 +1,91 @@
+# KalaCore — konfigurasi utama
+# Kala Nusantara RPG Server
+
+# ─────────── Umum ───────────
+debug: false
+server:
+  theme: nusantara
+  name: "Kala Nusantara"
+
+# ─────────── Lokalisasi ───────────
+locale:
+  default: id      # id = Bahasa Indonesia, en = English
+  available:
+    - id
+    - en
+
+# ─────────── Spawn / Dunia ───────────
+spawn:
+  world: kala_main
+  x: 0.5
+  y: 64.0
+  z: 0.5
+  yaw: 0.0
+  pitch: 0.0
+
+world:
+  border-radius: 3000    # radius dari 0,0 (meter / blok)
+  pregenerate: false     # aktifkan jika mau pre-gen awal
+  resource:
+    name: kala_resource
+    reset-requires-confirmation: true
+    reset-audit-log: resource-reset-audit.log
+  terraform-staging:
+    name: kala_terraform_test
+    generator: TerraformGenerator
+    border-radius: 500
+    auto-create: true
+    seed: 512718691
+  structures:
+    # Semua struktur memakai block/item vanilla dan aman untuk Java + Bedrock.
+    # Nether/End sengaja tidak ada di daftar ini.
+    enabled-worlds:
+      - kala_main
+      - kala_resource
+      - kala_resource_test
+      - kala_terraform_test
+
+# ─────────── Ekonomi ───────────
+economy:
+  starting-balance: 500.0
+  currency-name: "Rupiah Kala"
+  currency-symbol: "Rp"
+  max-balance: 1000000.0
+
+# ─────────── Tutorial ───────────
+tutorial:
+  enabled: true
+  timeout-minutes: 60    # batas waktu tutorial sebelum force-skip
+  quest-id: "tutorial_labuhan"
+
+# ─────────── NPC ───────────
+npc:
+  mbah-kala:
+    name: "§6Mbah Kala"
+    skin: "mbah_kala"
+    world: kala_main
+    x: 5.5
+    y: 64.0
+    z: 5.5
+
+# ─────────── Kasta / Profesi ───────────
+profesi:
+  default: "Pengembara"
+  list:
+    - Pengembara
+    - Nelayan
+    - Petani
+    - Pedagang
+    - Pengrajin
+    - Penjaga
+
+# ─────────── Kompas Pengembara ───────────
+kompas:
+  material: COMPASS
+  custom-model-data: 1001
+  tabs:
+    - MISI
+    - PETA
+    - KAMPUNG
+    - PROGRES
+    - PANDUAN
