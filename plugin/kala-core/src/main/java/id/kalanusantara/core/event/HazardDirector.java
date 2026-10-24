@@ -32,6 +32,7 @@ public class HazardDirector {
 
     private final KalaCorePlugin plugin;
     private final WorldImpactPolicy policy;
+    private final java.util.logging.Logger log;
     private final Random random = new Random();
 
     private final Set<BukkitTask> activeTasks = ConcurrentHashMap.newKeySet();
@@ -41,6 +42,7 @@ public class HazardDirector {
     public HazardDirector(KalaCorePlugin plugin, WorldImpactPolicy policy) {
         this.plugin = plugin;
         this.policy = policy;
+        this.log = plugin.getLogger();
     }
 
     /**
@@ -96,51 +98,72 @@ public class HazardDirector {
     }
 
     /**
-     * Menemukan lokasi target yang aman (di luar safe zone spawn, bukan di dalam claim)
+     * Menemukan lokasi target yang aman (Audit V8: Fail-closed & validasi permukaan eksplisit)
      */
-    private Location findSafeTargetLocation(Location center, double radius) {
+    public Location findSafeTargetLocation(Location center, double radius) {
         World world = center.getWorld();
         if (world == null) return null;
 
         double safeZoneRadiusSq = Math.pow(plugin.getKalaConfig().getSpawnSafeZoneRadius(), 2);
         Location spawnLoc = world.getSpawnLocation();
 
-        for (int attempt = 0; attempt < 8; attempt++) {
+        for (int attempt = 0; attempt < 10; attempt++) {
             double angle = random.nextDouble() * 2 * Math.PI;
             double dist = 8.0 + random.nextDouble() * (radius - 8.0);
             double x = center.getX() + Math.cos(angle) * dist;
             double z = center.getZ() + Math.sin(angle) * dist;
-            int y = world.getHighestBlockYAt((int) x, (int) z);
+            int highestY = world.getHighestBlockYAt((int) x, (int) z);
 
-            Location loc = new Location(world, x, y, z);
+            // Audit V8: Pisahkan surface block dan impact target (+1.0 Y di atas permukaan)
+            Location candidate = new Location(world, Math.floor(x) + 0.5, highestY + 1.0, Math.floor(z) + 0.5);
 
-            // 1. Cek jarak dari spawn safe zone
-            if (loc.distanceSquared(spawnLoc) < safeZoneRadiusSq) {
-                continue;
+            if (isValidHazardTarget(candidate, spawnLoc, safeZoneRadiusSq)) {
+                return candidate;
             }
-
-            // 2. Cek apakah di atas air atau lava
-            Block block = loc.getBlock();
-            if (block.isLiquid() || block.getType() == Material.AIR) {
-                continue;
-            }
-
-            // 3. Cek claim GriefPrevention jika aktif
-            if (isInsidePlayerClaim(loc)) {
-                continue;
-            }
-
-            return loc;
         }
 
-        // Fallback: gunakan center jika di luar safe zone
-        if (center.distanceSquared(spawnLoc) >= safeZoneRadiusSq) {
-            return center.clone();
+        // Fallback: validasi center dengan aturan yang sama ketatnya (Audit V8)
+        int centerY = world.getHighestBlockYAt(center.getBlockX(), center.getBlockZ());
+        Location centerCandidate = new Location(world, center.getBlockX() + 0.5, centerY + 1.0, center.getBlockZ() + 0.5);
+        if (isValidHazardTarget(centerCandidate, spawnLoc, safeZoneRadiusSq)) {
+            return centerCandidate;
         }
+
+        log.info("[HazardDirector] Tidak menemukan target hazard yang aman pada salvo ini (Fail-Safe aktivasi).");
         return null;
     }
 
-    private boolean isInsidePlayerClaim(Location loc) {
+    public boolean isValidHazardTarget(Location candidate, Location spawnLoc, double safeZoneRadiusSq) {
+        if (candidate == null || candidate.getWorld() == null) return false;
+
+        // 1. Cek jarak dari spawn safe zone
+        if (spawnLoc != null && candidate.distanceSquared(spawnLoc) < safeZoneRadiusSq) {
+            return false;
+        }
+
+        // 2. Blok penyangga di bawah harus solid (bukan air, lava, atau void)
+        Location surfaceLoc = candidate.clone().subtract(0, 1.0, 0);
+        Block surfaceBlock = surfaceLoc.getBlock();
+        if (surfaceBlock.isLiquid() || surfaceBlock.getType() == Material.AIR || !surfaceBlock.getType().isSolid()) {
+            return false;
+        }
+
+        // 3. Titik dampak sendiri harus dapat dilalui (udara)
+        Block impactBlock = candidate.getBlock();
+        if (impactBlock.getType().isSolid()) {
+            return false;
+        }
+
+        // 4. Cek claim GriefPrevention (Fail-closed)
+        if (isInsidePlayerClaim(candidate)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public boolean isInsidePlayerClaim(Location loc) {
+        if (loc == null) return true; // Fail-closed
         try {
             org.bukkit.plugin.Plugin gp = Bukkit.getPluginManager().getPlugin("GriefPrevention");
             if (gp != null && gp.isEnabled()) {
@@ -151,8 +174,12 @@ public class HazardDirector {
                     return claim != null;
                 }
             }
-        } catch (Throwable ignored) {}
-        return false;
+            return false;
+        } catch (Throwable t) {
+            // Audit V8 P1 Fix: Fail-closed. Jika terjadi error refleksi, tolak target demi keamanan claim
+            log.warning("[HazardDirector] Gagal memverifikasi status claim (Fail-Closed aktif): " + t.getMessage());
+            return true;
+        }
     }
 
     /**

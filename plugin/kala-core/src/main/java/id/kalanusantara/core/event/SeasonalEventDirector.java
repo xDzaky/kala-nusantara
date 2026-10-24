@@ -8,6 +8,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.*;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -212,9 +213,7 @@ public class SeasonalEventDirector {
 
             for (int i = 0; i < crateCount; i++) {
                 double x = spawnLoc.getX() + (random.nextDouble() - 0.5) * 100;
-                double z = spawnLoc.getZ() + (random.nextDouble() - 0.5) * 100;
-                int y = world.getHighestBlockYAt((int) x, (int) z);
-                Location loc = new Location(world, x, y + 1, z);
+                Location loc = findCoastalLocation(spawnLoc, 80.0);
                 activeHotspots.add(loc);
 
                 // Spawn Driftwood Crate Item
@@ -246,13 +245,55 @@ public class SeasonalEventDirector {
                 double x = spawnLoc.getX() + (random.nextDouble() - 0.5) * 80;
                 double z = spawnLoc.getZ() + (random.nextDouble() - 0.5) * 80;
                 int y = world.getHighestBlockYAt((int) x, (int) z);
-                Location loc = new Location(world, x, y + 1, z);
+                Location loc = new Location(world, Math.floor(x) + 0.5, y + 1.0, Math.floor(z) + 0.5);
                 activeHotspots.add(loc);
+
+                // Audit V8: Spawn marker fisik untuk kemudahan tap sentuh pada layar HP Bedrock
+                try {
+                    org.bukkit.entity.ArmorStand marker = world.spawn(loc, org.bukkit.entity.ArmorStand.class, as -> {
+                        as.setVisible(false);
+                        as.setSmall(true);
+                        as.setMarker(false);
+                        as.setGravity(false);
+                        as.setCustomNameVisible(true);
+                        as.customName(Component.text("🔥 Bara Kawah §7(Klik)", NamedTextColor.GOLD));
+                        if (as.getEquipment() != null) {
+                            as.getEquipment().setHelmet(new ItemStack(Material.MAGMA_BLOCK));
+                        }
+                    });
+                    policy.registerEventEntity(marker, currentEventId);
+                } catch (Exception ignored) {}
             }
 
             // P1 Fix: Target objective persis sama dengan jumlah hotspot aktif!
             this.objectiveTarget = activeHotspots.size();
         }
+    }
+
+    private Location findCoastalLocation(Location origin, double radius) {
+        World world = origin.getWorld();
+        if (world == null) return origin;
+
+        for (int i = 0; i < 16; i++) {
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double dist = 12.0 + random.nextDouble() * (radius - 12.0);
+            int x = (int) (origin.getX() + Math.cos(angle) * dist);
+            int z = (int) (origin.getZ() + Math.sin(angle) * dist);
+            int y = world.getHighestBlockYAt(x, z);
+
+            Block b = world.getBlockAt(x, y, z);
+            boolean isNearWater = b.isLiquid() ||
+                world.getBlockAt(x + 1, y, z).isLiquid() ||
+                world.getBlockAt(x - 1, y, z).isLiquid() ||
+                world.getBlockAt(x, y, z + 1).isLiquid() ||
+                world.getBlockAt(x, y, z - 1).isLiquid() ||
+                b.getType() == Material.SAND || b.getType() == Material.GRAVEL;
+
+            if (isNearWater) {
+                return new Location(world, x + 0.5, Math.max(62.0, y + 1.0), z + 0.5);
+            }
+        }
+        return origin.clone().add(15.0, 1.0, 15.0);
     }
 
     private void startEventLoops() {
@@ -318,6 +359,13 @@ public class SeasonalEventDirector {
                 // Visual & Audio pemadaman bara
                 targetLoc.getWorld().spawnParticle(Particle.SMOKE, targetLoc, 15, 0.4, 0.4, 0.4, 0.04);
                 targetLoc.getWorld().playSound(targetLoc, Sound.BLOCK_FIRE_EXTINGUISH, 0.9f, 1.2f);
+
+                // Audit V8: Hapus marker fisik di titik ini
+                for (org.bukkit.entity.Entity e : targetLoc.getWorld().getNearbyEntities(targetLoc, 2.5, 2.5, 2.5)) {
+                    if (policy.isEventEntity(e) && currentEventId.equals(policy.getEventId(e))) {
+                        e.remove();
+                    }
+                }
 
                 // Catat ke ledger
                 ledger.recordContribution(currentEventId, player, "PADAMKAN_BARA", 15);

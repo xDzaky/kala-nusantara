@@ -179,16 +179,59 @@ public class StorageManager {
                 UNIQUE(event_id, uuid, objective_id)
             )
             """,
-            // Event Single-Claim Ledger (Audit V7 P1 Fix)
+            // Event Single-Claim Ledger (Audit V7/V8 Outbox Pattern)
             """
             CREATE TABLE IF NOT EXISTS event_claims (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id TEXT UNIQUE,
                 event_id TEXT NOT NULL,
                 uuid TEXT NOT NULL,
+                player_name TEXT,
+                score INTEGER DEFAULT 0,
                 amount REAL NOT NULL,
                 exp INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'PENDING',
                 timestamp INTEGER NOT NULL,
+                paid_at INTEGER,
                 UNIQUE(event_id, uuid)
+            )
+            """,
+            // Entri Penemuan Nusantara (Discovery Catalog V8)
+            """
+            CREATE TABLE IF NOT EXISTS nusantara_discoveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT NOT NULL,
+                discovery_type TEXT NOT NULL,
+                entry_id TEXT NOT NULL,
+                island TEXT NOT NULL,
+                discovered_at INTEGER NOT NULL,
+                UNIQUE(uuid, discovery_type, entry_id)
+            )
+            """,
+            // Kontrak Kampung Mingguan (V8)
+            """
+            CREATE TABLE IF NOT EXISTS village_contracts (
+                id TEXT PRIMARY KEY,
+                week_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                category TEXT NOT NULL,
+                target_count INTEGER NOT NULL,
+                reward_rupiah REAL NOT NULL,
+                reward_exp INTEGER NOT NULL,
+                expiry INTEGER NOT NULL
+            )
+            """,
+            // Progres Kontrak Pemain (V8)
+            """
+            CREATE TABLE IF NOT EXISTS player_contract_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT NOT NULL,
+                contract_id TEXT NOT NULL,
+                current_count INTEGER DEFAULT 0,
+                completed INTEGER DEFAULT 0,
+                claimed INTEGER DEFAULT 0,
+                completed_at INTEGER,
+                UNIQUE(uuid, contract_id)
             )
             """
         };
@@ -197,13 +240,27 @@ public class StorageManager {
             for (String sql : tables) {
                 st.execute(sql);
             }
-            // Migration: tambah step_count jika belum ada (DB lama)
+            // Migrations:
             try {
                 st.execute("ALTER TABLE quest_progress ADD COLUMN step_count INTEGER DEFAULT 0");
-                log.info("Migration: kolom step_count ditambahkan ke quest_progress");
-            } catch (SQLException ignored) {
-                // Kolom sudah ada — normal
-            }
+            } catch (SQLException ignored) {}
+
+            // Migrations untuk event_claims (V8 Outbox pattern)
+            try {
+                st.execute("ALTER TABLE event_claims ADD COLUMN claim_id TEXT");
+            } catch (SQLException ignored) {}
+            try {
+                st.execute("ALTER TABLE event_claims ADD COLUMN player_name TEXT");
+            } catch (SQLException ignored) {}
+            try {
+                st.execute("ALTER TABLE event_claims ADD COLUMN score INTEGER DEFAULT 0");
+            } catch (SQLException ignored) {}
+            try {
+                st.execute("ALTER TABLE event_claims ADD COLUMN status TEXT DEFAULT 'PAID'");
+            } catch (SQLException ignored) {}
+            try {
+                st.execute("ALTER TABLE event_claims ADD COLUMN paid_at INTEGER");
+            } catch (SQLException ignored) {}
         }
         log.info("Schema database OK (" + tables.length + " tabel)");
     }

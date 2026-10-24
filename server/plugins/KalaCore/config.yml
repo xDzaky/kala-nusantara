@@ -38,9 +38,8 @@ world:
     seed: 512718691
   structures:
     # Semua struktur memakai block/item vanilla dan aman untuk Java + Bedrock.
-    # Nether/End sengaja tidak ada di daftar ini.
+    # kala_main dikunci (zero procedural overwrite) agar bangunan dan lore terlindungi.
     enabled-worlds:
-      - kala_main
       - kala_resource
       - kala_resource_test
       - kala_terraform_test

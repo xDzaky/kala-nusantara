@@ -3,6 +3,7 @@ package id.kalanusantara.core.commands;
 import id.kalanusantara.core.KalaCorePlugin;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -80,6 +81,59 @@ public class KalaCommand implements CommandExecutor {
                 if (!claimed) {
                     player.sendMessage(Component.text("§cAnda tidak memiliki poin kontribusi atau reward sudah pernah diklaim untuk event ini!", NamedTextColor.RED));
                 }
+            }
+            case "pay", "transfer" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Component.text("Hanya pemain!", NamedTextColor.RED));
+                    return true;
+                }
+                if (args.length < 3) {
+                    player.sendMessage(Component.text("Penggunaan: /kala pay <pemain> <jumlah>", NamedTextColor.RED));
+                    return true;
+                }
+                String targetName = args[1];
+                Player target = Bukkit.getPlayer(targetName);
+                if (target == null) {
+                    player.sendMessage(Component.text("Pemain target tidak online atau tidak ditemukan!", NamedTextColor.RED));
+                    return true;
+                }
+                try {
+                    double amount = Double.parseDouble(args[2]);
+                    var result = plugin.getEconomy().transfer(player.getUniqueId(), target.getUniqueId(), amount);
+                    switch (result) {
+                        case SUCCESS -> {
+                            player.sendMessage(Component.text("✔ Berhasil mentransfer " + plugin.getEconomy().format(amount) + " ke " + target.getName() + "!", NamedTextColor.GREEN));
+                            target.sendMessage(Component.text("✦ Anda menerima transfer " + plugin.getEconomy().format(amount) + " dari " + player.getName() + "!", NamedTextColor.GOLD));
+                        }
+                        case INSUFFICIENT_FUNDS -> player.sendMessage(Component.text("✘ Saldo Anda tidak mencukupi untuk transfer ini!", NamedTextColor.RED));
+                        case SAME_PLAYER -> player.sendMessage(Component.text("✘ Anda tidak dapat mentransfer uang ke diri sendiri!", NamedTextColor.RED));
+                        case INVALID_AMOUNT -> player.sendMessage(Component.text("✘ Jumlah transfer tidak valid!", NamedTextColor.RED));
+                        case DATABASE_ERROR -> player.sendMessage(Component.text("✘ Terjadi kesalahan transaksi database!", NamedTextColor.RED));
+                    }
+                } catch (NumberFormatException e) {
+                    player.sendMessage(Component.text("Jumlah transfer harus berupa angka!", NamedTextColor.RED));
+                }
+            }
+            case "kontrak" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Component.text("Hanya pemain!", NamedTextColor.RED));
+                    return true;
+                }
+                sender.sendMessage(Component.text("─── Kontrak Gotong Royong Kampung (Minggu Ini) ───", NamedTextColor.GOLD));
+                for (var c : plugin.getVillageContractManager().getActiveContracts()) {
+                    sender.sendMessage(Component.text("• §e" + c.title() + " §7(" + c.category() + ")")
+                        .append(Component.text("\n  Target: §f" + c.targetCount() + " §7| Hadiah: §6" + plugin.getEconomy().format(c.rewardRupiah()) + " §7+ §b" + c.rewardExp() + " EXP")));
+                }
+            }
+            case "penemuan", "koleksi" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage(Component.text("Hanya pemain!", NamedTextColor.RED));
+                    return true;
+                }
+                int count = plugin.getDiscoveryManager().getDiscoveryCount(player.getUniqueId());
+                player.sendMessage(Component.text("─── Katalog Penemuan Nusantara ───", NamedTextColor.GOLD));
+                player.sendMessage(Component.text("Total Catatan Observasi: §a" + count + " Entri", NamedTextColor.YELLOW));
+                player.sendMessage(Component.text("§7Gunakan Kit Survei atau jelajahi pulau untuk mencatat satwa dan landmark Nusantara!", NamedTextColor.GRAY));
             }
             case "version", "ver" -> {
                 sender.sendMessage(Component.text(

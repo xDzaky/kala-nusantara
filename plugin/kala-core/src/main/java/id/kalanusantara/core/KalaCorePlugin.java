@@ -99,6 +99,10 @@ public final class KalaCorePlugin extends JavaPlugin {
     private VolcanoEncounterDirector volcanoEncounterDirector;
     private SeasonalEventDirector seasonalEventDirector;
 
+    // ── V8 Discovery & Kontrak Kampung ──
+    private id.kalanusantara.core.discovery.NusantaraDiscoveryManager discoveryManager;
+    private id.kalanusantara.core.contract.VillageContractManager villageContractManager;
+
     // ── UI ──
     private MenuManager menuManager;
     private KalaScoreboardManager scoreboardManager;
@@ -214,6 +218,13 @@ public final class KalaCorePlugin extends JavaPlugin {
         faunaManager = new id.kalanusantara.core.fauna.FaunaManager(this);
         faunaManager.initialize();
 
+        // 14c. Discovery & Kontrak Kampung (Audit V8)
+        discoveryManager = new id.kalanusantara.core.discovery.NusantaraDiscoveryManager(this);
+        discoveryManager.initialize();
+
+        villageContractManager = new id.kalanusantara.core.contract.VillageContractManager(this);
+        villageContractManager.initialize();
+
         // 15. UI
         menuManager   = new MenuManager(this);
         scoreboardManager = new KalaScoreboardManager(this);
@@ -230,6 +241,13 @@ public final class KalaCorePlugin extends JavaPlugin {
 
         // 14. Listeners
         registerListeners();
+
+        // 15. Startup Sweep (Audit V8): Bersihkan entitas sisa crash setelah world dimuat
+        getServer().getScheduler().runTaskLater(this, () -> {
+            if (worldImpactPolicy != null) {
+                worldImpactPolicy.sweepStrandedEventEntities();
+            }
+        }, 20L);
 
         log.info("KalaCore [Phase 6 - Produksi] berhasil dimuat! Selamat datang di Nusantara!");
     }
@@ -339,4 +357,6 @@ public final class KalaCorePlugin extends JavaPlugin {
     public EventContributionLedger getEventContributionLedger() { return eventContributionLedger; }
     public VolcanoEncounterDirector getVolcanoEncounterDirector() { return volcanoEncounterDirector; }
     public SeasonalEventDirector getSeasonalEventDirector() { return seasonalEventDirector; }
+    public id.kalanusantara.core.discovery.NusantaraDiscoveryManager getDiscoveryManager() { return discoveryManager; }
+    public id.kalanusantara.core.contract.VillageContractManager getVillageContractManager() { return villageContractManager; }
 }

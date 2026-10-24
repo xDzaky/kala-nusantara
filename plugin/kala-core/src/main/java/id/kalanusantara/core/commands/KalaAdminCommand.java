@@ -219,13 +219,14 @@ public class KalaAdminCommand implements CommandExecutor {
             }
             case "backup" -> {
                 if (args.length < 2) {
-                    sender.sendMessage(Component.text("Penggunaan: /ka backup <create|list>", NamedTextColor.RED));
+                    sender.sendMessage(Component.text("Penggunaan: /ka backup <db|full|list>", NamedTextColor.RED));
                     return true;
                 }
-                if (args[1].equalsIgnoreCase("create")) {
-                    plugin.getBackupManager().createBackup(sender);
-                } else if (args[1].equalsIgnoreCase("list")) {
-                    plugin.getBackupManager().listBackups(sender);
+                switch (args[1].toLowerCase()) {
+                    case "db" -> plugin.getBackupManager().backupDatabase(sender);
+                    case "full", "create" -> plugin.getBackupManager().backupFullServer(sender);
+                    case "list" -> plugin.getBackupManager().listBackups(sender);
+                    default -> sender.sendMessage(Component.text("Subcommand backup: db, full, list", NamedTextColor.RED));
                 }
             }
             case "resource", "tambang" -> {

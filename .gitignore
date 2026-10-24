@@ -37,6 +37,18 @@ server/plugins/LuckPerms/libs/
 **/TerraformGenerator/logs/
 **/Geyser-Spigot/cache/
 
+# Runtime player data, server lists, and plugin caches
+server/usercache.json
+server/ops.json
+server/banned-players.json
+server/banned-ips.json
+server/whitelist.json
+server/plugins/Geyser-Spigot/cache/
+server/plugins/Geyser-Spigot/locales/
+server/plugins/GriefPreventionData/PlayerData/
+server/plugins/GriefPreventionData/Logs/
+**/nightbreak-changelogs.yml
+
 # World region files, chunk data, playerdata (runtime state)
 server/kala_main/
 server/kala_resource/

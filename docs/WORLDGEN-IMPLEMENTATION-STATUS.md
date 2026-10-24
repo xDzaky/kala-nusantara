@@ -13,9 +13,9 @@
 - Reset `kala_resource` sekarang memerlukan konfirmasi eksplisit: `/ka resource reset confirm` atau `/tambang reset confirm`.
 - Reset memiliki lock proses, memblokir teleport saat reset, memvalidasi nama/path world, hanya menghapus `region`, `entities`, dan `poi`, serta mencatat hasil ke `plugins/KalaCore/resource-reset-audit.log`.
 - Smoke test boot pada 24 Oktober 2026 berhasil: Paper 26.3-218 memuat KalaCore, `kala_resource`, Geyser UDP 19132, dan Java TCP 25565 tanpa error KalaCore.
-- TerraformGenerator dikonfigurasi untuk semua Overworld Kala. Perubahan hanya berlaku ketika chunk baru digenerate; chunk lama tidak ditulis ulang.
-- Struktur internal Nusantara aktif di semua Overworld Kala baru dengan jarak minimum 256 blok, perlindungan spawn/claim, dan material vanilla yang dapat dirender Java serta Bedrock.
-- BetterStructures dibatasi ke semua Overworld Kala (`kala_main`, `kala_resource`, dan world staging); Nether/End dikecualikan. Paket struktur resmi belum dipasang karena distribusi resminya memerlukan ZIP impor atau token Nightbreak pemilik akun.
+- TerraformGenerator hanya diarahkan ke world isolasi `kala_terraform_test`. World production `kala_main` dan `kala_resource` tetap menggunakan vanilla generator.
+- Struktur internal Nusantara aktif di world resource/staging (`kala_resource`, `kala_resource_test`, `kala_terraform_test`) dengan jarak minimum 256 blok, perlindungan spawn/claim, dan material vanilla yang dapat dirender Java serta Bedrock.
+- BetterStructures dikunci agar TIDAK aktif di `kala_main` (`kala_main: false` pada `ValidWorlds.yml` dan `config.yml`). Struktur prosedural BetterStructures hanya diizinkan di resource/staging bila pack resmi dipasang kelak.
 
 ## Yang sengaja belum dipromosikan
 

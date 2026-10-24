@@ -1,0 +1,33 @@
+{
+  "format_version": "1",
+  "items": {
+    "kala:kompas_pengembara": {
+      "name": "Kompas Pengembara",
+      "bedrock_id": "kala:kompas_pengembara",
+      "bedrock_data": 0,
+      "icon": "kompas_pengembara",
+      "vanilla_fallback": "minecraft:compass"
+    },
+    "kala:kit_survei": {
+      "name": "Kit Survei Lapangan",
+      "bedrock_id": "kala:kit_survei",
+      "bedrock_data": 0,
+      "icon": "kit_survei",
+      "vanilla_fallback": "minecraft:spyglass"
+    },
+    "kala:lampu_suar": {
+      "name": "Lampu Suar Pesisir",
+      "bedrock_id": "kala:lampu_suar",
+      "bedrock_data": 0,
+      "icon": "lampu_suar",
+      "vanilla_fallback": "minecraft:lantern"
+    },
+    "kala:kerudung_abu": {
+      "name": "Kerudung Abu Vulkanik",
+      "bedrock_id": "kala:kerudung_abu",
+      "bedrock_data": 0,
+      "icon": "kerudung_abu",
+      "vanilla_fallback": "minecraft:leather_helmet"
+    }
+  }
+}

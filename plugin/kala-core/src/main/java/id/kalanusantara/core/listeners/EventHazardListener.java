@@ -83,7 +83,7 @@ public class EventHazardListener implements Listener {
 
     /**
      * Interaksi pemain untuk event musiman:
-     * - Memadamkan bara semu dengan klik
+     * - Memadamkan bara semu dengan klik blok atau klik entity marker (Audit V8 Bedrock Friendly)
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerInteract(PlayerInteractEvent event) {
@@ -93,6 +93,16 @@ public class EventHazardListener implements Listener {
                 if (seasonalDirector.handlePlayerInteraction(event.getPlayer(), clicked)) {
                     event.setCancelled(true);
                 }
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerInteractEntity(org.bukkit.event.player.PlayerInteractAtEntityEvent event) {
+        Entity entity = event.getRightClicked();
+        if (policy.isEventEntity(entity)) {
+            if (seasonalDirector.handlePlayerInteraction(event.getPlayer(), entity.getLocation())) {
+                event.setCancelled(true);
             }
         }
     }

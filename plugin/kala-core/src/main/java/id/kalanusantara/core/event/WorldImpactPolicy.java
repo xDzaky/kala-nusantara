@@ -175,4 +175,23 @@ public class WorldImpactPolicy {
     public void cleanupAllEventEntities(String eventId) {
         cleanupEvent(eventId);
     }
+
+    /**
+     * Startup Sweep (Audit V8): Membersihkan entitas bertag event yang terlantar akibat hard crash / kill process.
+     */
+    public int sweepStrandedEventEntities() {
+        int removed = 0;
+        for (World world : Bukkit.getWorlds()) {
+            for (Entity e : world.getEntities()) {
+                if (isEventEntity(e)) {
+                    e.remove();
+                    removed++;
+                }
+            }
+        }
+        if (removed > 0) {
+            log.info("[WorldImpactPolicy] Startup sweep berhasil membersihkan " + removed + " entitas terlantar dari sesi sebelumnya.");
+        }
+        return removed;
+    }
 }
